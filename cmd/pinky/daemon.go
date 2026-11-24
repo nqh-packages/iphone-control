@@ -213,6 +213,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		TrustNewAgents: c.Fake || os.Getenv("PINKY_TRUST_AGENTS") == "1",
 		PIN:            c.PIN,
 		AllowDevices:   allowDevices(),
+		LeaseReserve:   15 * time.Second,
 		TrafficKeys:    trafficKeys(c.Fake),
 		TrafficTailnet: trafficTailnet(c.Fake),
 	})
