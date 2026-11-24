@@ -2140,6 +2140,10 @@ func (g *Gateway) perform(ctx context.Context, dev driver.Device, a Action, p *p
 	case "tap":
 		return dev.Tap(ctx, p.point, driver.TapOptions{LongPress: a.LongPress})
 	case "type":
+		text, err := g.secretText(a, p)
+		if err != nil {
+			return err
+		}
 		if p.hasPt && p.target != nil && !p.target.Has(screen.StateFocused) {
 			if err := dev.Tap(ctx, p.point, driver.TapOptions{}); err != nil {
 				return err
@@ -2147,10 +2151,6 @@ func (g *Gateway) perform(ctx context.Context, dev driver.Device, a Action, p *p
 			if !sleepCtx(ctx, g.opt.PollInterval, nil) {
 				return ctx.Err()
 			}
-		}
-		text, err := g.secretText(a, p)
-		if err != nil {
-			return err
 		}
 		return scrubSecret(dev.Type(ctx, text, driver.TypeOptions{Append: a.Append, Submit: a.Submit}), a, text)
 	case "swipe":

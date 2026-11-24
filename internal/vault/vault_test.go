@@ -62,7 +62,7 @@ func TestRef(t *testing.T) {
 
 func TestVaultTakeOnce(t *testing.T) {
 	v, _ := newTestVault(bank.ID)
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	if err := v.Staged("pw", bank); err != nil {
@@ -85,10 +85,10 @@ func TestVaultTakeOnce(t *testing.T) {
 
 func TestVaultExpires(t *testing.T) {
 	v, now := newTestVault(bank.ID)
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel), "otp": []byte("482913")}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel), "otp": []byte("482913")}); err != nil {
 		t.Fatal(err)
 	}
-	if err := v.Put(bank.ID, time.Hour, map[string][]byte{"long": []byte(sentinel)}); err != nil {
+	if err := v.Deposit(bank.ID, time.Hour, map[string][]byte{"long": []byte(sentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	*now = now.Add(DefaultTTL - time.Second)
@@ -108,7 +108,7 @@ func TestVaultExpires(t *testing.T) {
 func TestVaultBoundToOneApp(t *testing.T) {
 	other := screen.App{ID: "com.example.shop", Name: "Shop"}
 	v, _ := newTestVault(bank.ID, other.ID)
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	for _, app := range []screen.App{other, {Name: "Bank"}, {ID: "com.example.bank.evil", Name: "Bank"}} {
@@ -128,10 +128,10 @@ func TestVaultBoundToOneApp(t *testing.T) {
 func TestVaultAllowedIsAskedAtPutAndTake(t *testing.T) {
 	list := map[string]bool{bank.ID: true}
 	v := New(func(id string) bool { return list[id] })
-	if err := v.Put("com.example.unlisted", 0, map[string][]byte{"pw": []byte(sentinel)}); !errors.Is(err, ErrAppNotAllowed) {
+	if err := v.Deposit("com.example.unlisted", 0, map[string][]byte{"pw": []byte(sentinel)}); !errors.Is(err, ErrAppNotAllowed) {
 		t.Fatalf("put to an unlisted app: %v", err)
 	}
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	delete(list, bank.ID)
@@ -146,19 +146,19 @@ func TestVaultRefusesWhatItCannotMask(t *testing.T) {
 		name string
 		val  string
 	}{{"pw", ""}, {"pw", "abc"}, {"Bad Name", sentinel}, {"", sentinel}} {
-		if err := v.Put(bank.ID, 0, map[string][]byte{c.name: []byte(c.val)}); !errors.Is(err, ErrBadSecret) {
+		if err := v.Deposit(bank.ID, 0, map[string][]byte{c.name: []byte(c.val)}); !errors.Is(err, ErrBadSecret) {
 			t.Errorf("%q=%q: %v", c.name, c.val, err)
 		}
 	}
 	for i := 0; i < maxSlots; i++ {
-		if err := v.Put(bank.ID, 0, map[string][]byte{"n" + string(rune('a'+i)): []byte(sentinel)}); err != nil {
+		if err := v.Deposit(bank.ID, 0, map[string][]byte{"n" + string(rune('a'+i)): []byte(sentinel)}); err != nil {
 			t.Fatal(err)
 		}
 	}
-	if err := v.Put(bank.ID, 0, map[string][]byte{"extra": []byte(sentinel)}); !errors.Is(err, ErrBadSecret) {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"extra": []byte(sentinel)}); !errors.Is(err, ErrBadSecret) {
 		t.Errorf("slot %d: %v", maxSlots+1, err)
 	}
-	if err := v.Put(bank.ID, 0, map[string][]byte{"na": []byte(sentinel + "2")}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"na": []byte(sentinel + "2")}); err != nil {
 		t.Errorf("replacing a staged name: %v", err)
 	}
 }
@@ -166,7 +166,7 @@ func TestVaultRefusesWhatItCannotMask(t *testing.T) {
 func TestVaultPutCopiesAndTakeWipes(t *testing.T) {
 	v, now := newTestVault(bank.ID)
 	in := []byte(sentinel)
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": in}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": in}); err != nil {
 		t.Fatal(err)
 	}
 	in[0] = 'X'
@@ -188,7 +188,7 @@ func TestVaultPutCopiesAndTakeWipes(t *testing.T) {
 
 func TestMask(t *testing.T) {
 	v, now := newTestVault(bank.ID)
-	if err := v.Put(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	read := func() *screen.Screen {

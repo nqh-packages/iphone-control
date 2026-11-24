@@ -34,7 +34,7 @@ type reply struct {
 	Fix   string `json:"fix,omitempty"`
 }
 
-// Staged is what a stager is told after Put: the names kept, the app they
+// Staged is what a stager is told after Deposit: the names kept, the app they
 // are for and how long they last. It never holds a value.
 type Staged struct {
 	Names      []string `json:"staged"`
@@ -137,7 +137,7 @@ func (v *Vault) handle(c net.Conn) {
 		return
 	}
 	ttl := ClampTTL(time.Duration(h.TTLMS) * time.Millisecond)
-	if err := v.Put(h.App, ttl, values); err != nil {
+	if err := v.Deposit(h.App, ttl, values); err != nil {
 		fix := "check the name and the value"
 		if errors.Is(err, ErrAppNotAllowed) {
 			fix = "the owner adds " + h.App + " to credential_apps in rules.yaml"

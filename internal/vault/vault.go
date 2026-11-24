@@ -67,16 +67,16 @@ type Vault struct {
 }
 
 // New returns an empty vault. allowed is the policy's credential_apps check
-// (Engine.SecretApp); it is asked again at Put and at TakeSecret, so
+// (Engine.SecretApp); it is asked again at Deposit and at TakeSecret, so
 // removing an app from the list stops a secret already staged for it.
 func New(allowed func(appID string) bool) *Vault {
 	return &Vault{slots: map[string]*slot{}, now: time.Now, allowed: allowed}
 }
 
-// Put stages values by name for one app, for ttl (DefaultTTL when zero, at
+// Deposit stages values by name for one app, for ttl (DefaultTTL when zero, at
 // most MaxTTL), each used once. It takes copies of the values, which the
 // caller should wipe. A name staged again replaces the earlier value.
-func (v *Vault) Put(app string, ttl time.Duration, named map[string][]byte) error {
+func (v *Vault) Deposit(app string, ttl time.Duration, named map[string][]byte) error {
 	if app == "" || !v.allowed(app) {
 		return &refusal{ErrAppNotAllowed, fmt.Sprintf("%s is not on credential_apps", app)}
 	}

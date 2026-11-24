@@ -38,6 +38,6 @@ seams:
   - name: secret store input
     package: github.com/DIYgod/pinky/internal/vault
     methods:
-      - Put
+      - Deposit
     allowed: []
-    fix: "values enter the vault only through its socket (internal/vault/socket.go), so the credential broker's staging is the one way in. If another file really needs Put, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+    fix: "values enter the vault only through its socket (internal/vault/socket.go), so the credential broker's staging is the one way in. If another file really needs Deposit, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."

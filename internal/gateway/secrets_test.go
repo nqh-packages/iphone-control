@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	_ "image/jpeg"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/DIYgod/pinky/internal/demo"
+	"github.com/DIYgod/pinky/internal/driver"
 	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/internal/screen"
 	"github.com/DIYgod/pinky/internal/vault"
@@ -74,7 +76,7 @@ func newSecretRig(t *testing.T, listed ...string) *secretRig {
 
 func (r *secretRig) stage(t *testing.T, app, name, value string) {
 	t.Helper()
-	if err := r.v.Put(app, 0, map[string][]byte{name: []byte(value)}); err != nil {
+	if err := r.v.Deposit(app, 0, map[string][]byte{name: []byte(value)}); err != nil {
 		t.Fatal(err)
 	}
 }
@@ -325,7 +327,7 @@ func TestSecretStagedForAnotherApp(t *testing.T) {
 // staged for it.
 func TestSecretNotListed(t *testing.T) {
 	r := newSecretRig(t)
-	if err := r.v.Put(demo.Dinely, 0, map[string][]byte{"pw": []byte(canarySentinel)}); err == nil {
+	if err := r.v.Deposit(demo.Dinely, 0, map[string][]byte{"pw": []byte(canarySentinel)}); err == nil {
 		t.Fatal("a secret was staged for an app that is not listed")
 	}
 	res := r.typeRef(t, "Password", vault.Ref("pw"), false)
@@ -338,7 +340,7 @@ func TestSecretNotListed(t *testing.T) {
 // typed, and the agent is told how to stage it again.
 func TestSecretExpired(t *testing.T) {
 	r := newSecretRig(t, demo.Dinely)
-	if err := r.v.Put(demo.Dinely, time.Millisecond, map[string][]byte{"pw": []byte(canarySentinel)}); err != nil {
+	if err := r.v.Deposit(demo.Dinely, time.Millisecond, map[string][]byte{"pw": []byte(canarySentinel)}); err != nil {
 		t.Fatal(err)
 	}
 	time.Sleep(20 * time.Millisecond)
@@ -386,5 +388,27 @@ func TestSecretApproval(t *testing.T) {
 	res := <-done
 	if res.IsError() || strings.Contains(resultText(res), canarySentinel) || typedByDevice(r.dev, canarySentinel) != 1 {
 		t.Fatalf("%+v inputs %+v", res, r.dev.Inputs())
+	}
+}
+
+// TestSecretIsTakenBeforeTheFocusingTap: a secret that cannot be taken at
+// the last moment (it expired, or was used) fails before anything reaches
+// the phone, the focusing tap included.
+func TestSecretIsTakenBeforeTheFocusingTap(t *testing.T) {
+	g, dev := newTestGateway(t, func(o *Options) {
+		f := policy.DefaultFile()
+		f.CredentialApps = []string{demo.Dinely}
+		pol := policy.New(f, nil)
+		o.Policy, o.Secrets = pol, vault.New(pol.SecretApp)
+	})
+	field := screen.Element{Role: screen.RoleInput, Label: "Password", States: []string{screen.StatePassword}}
+	p := &prep{hasPt: true, point: screen.Point{X: 100, Y: 100}, target: &field}
+	p.input.Secret, p.input.App = true, screen.App{ID: demo.Dinely}
+	err := g.perform(context.Background(), dev, Action{Tool: "type", Text: vault.Ref("pw")}, p)
+	if !errors.Is(err, driver.ErrNotFound) || len(dev.Inputs()) != 0 {
+		t.Fatalf("err %v, the phone got %+v", err, dev.Inputs())
+	}
+	if strings.Contains(err.Error(), canarySentinel) {
+		t.Fatalf("the error holds a value: %v", err)
 	}
 }
