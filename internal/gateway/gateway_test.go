@@ -1313,3 +1313,21 @@ func TestTypeNote(t *testing.T) {
 		t.Fatalf("the note came again: %q", res.Message)
 	}
 }
+
+func TestAllowDevicesHidesEveryOtherPhone(t *testing.T) {
+	mine := demo.NewDevice("mine", "Agent phone", driver.Android)
+	other := demo.NewDevice("other", "Someone else's phone", driver.Android)
+	g, _ := newTestGateway(t, func(o *Options) {
+		o.Providers = []driver.Provider{demo.NewProvider(driver.Android, mine, other)}
+		o.AllowDevices = []string{"mine"}
+	})
+	deadline := time.Now().Add(2 * time.Second)
+	for len(g.Devices()) == 0 && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	time.Sleep(100 * time.Millisecond)
+	got := g.Devices()
+	if len(got) != 1 || got[0].Info.ID != "mine" {
+		t.Fatalf("devices = %+v, want only mine", got)
+	}
+}

@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 
@@ -211,6 +212,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		// and socket clients may answer approvals (for scripted tests).
 		TrustNewAgents: c.Fake || os.Getenv("PINKY_TRUST_AGENTS") == "1",
 		PIN:            c.PIN,
+		AllowDevices:   allowDevices(),
 		TrafficKeys:    trafficKeys(c.Fake),
 		TrafficTailnet: trafficTailnet(c.Fake),
 	})
@@ -268,4 +270,16 @@ func trafficKeys(fake bool) secret.Store {
 		return nil
 	}
 	return secret.System()
+}
+
+// allowDevices reads PINKY_ALLOW_DEVICES, a comma-separated list of the only
+// phone ids this gateway may know; unset means every phone.
+func allowDevices() []string {
+	var ids []string
+	for _, id := range strings.Split(os.Getenv("PINKY_ALLOW_DEVICES"), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			ids = append(ids, id)
+		}
+	}
+	return ids
 }

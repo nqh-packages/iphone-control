@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/netip"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -63,6 +64,10 @@ type Options struct {
 	// TrustNewAgents skips the approval of an agent's first connection. Use
 	// it only with fake devices.
 	TrustNewAgents bool
+	// AllowDevices, when not empty, lists the only phone ids the gateway
+	// knows: every other phone a provider lists is dropped before it is
+	// opened, shown or leased.
+	AllowDevices []string
 	// DefaultScope is what a newly approved agent may do; default everything.
 	DefaultScope Scope
 	// PIN returns a phone's saved PIN when the person asks to unlock it
@@ -414,6 +419,7 @@ func (g *Gateway) discover(ctx context.Context) {
 			listFailed = true
 			continue
 		}
+		infos = g.allowedDevices(infos)
 		seen := map[string]bool{}
 		for _, info := range infos {
 			seen[info.ID] = true
@@ -1177,4 +1183,18 @@ func (r *recorder) close() {
 	r.cond.Broadcast()
 	r.mu.Unlock()
 	<-r.idle
+}
+
+// allowedDevices drops the phones Options.AllowDevices does not name.
+func (g *Gateway) allowedDevices(infos []driver.Info) []driver.Info {
+	if len(g.opt.AllowDevices) == 0 {
+		return infos
+	}
+	var out []driver.Info
+	for _, info := range infos {
+		if slices.Contains(g.opt.AllowDevices, info.ID) {
+			out = append(out, info)
+		}
+	}
+	return out
 }
