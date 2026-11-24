@@ -55,7 +55,7 @@ func (g *Gateway) wake(ctx context.Context, d *device) {
 // confirm with Touch ID; unlockTimeout bounds entering it.
 const (
 	unlockPINTimeout = 2 * time.Minute
-	unlockTimeout    = 30 * time.Second
+	unlockTimeout    = 90 * time.Second
 )
 
 // ErrWrongPIN means the phone was still locked after Pinky entered the

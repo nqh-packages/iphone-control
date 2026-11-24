@@ -98,8 +98,8 @@ type powerPhone interface {
 
 // Timing for waking and unlocking.
 const (
-	wakeWait    = 2 * time.Second        // for the screen to come on after Home
-	keypadWait  = 3 * time.Second        // for the passcode pad after each swipe
+	wakeWait    = 5 * time.Second        // for the screen to come on after Home
+	keypadWait  = 10 * time.Second       // for the passcode pad after each swipe
 	unlockWait  = 4 * time.Second        // for lockdown to report the unlock
 	powerPoll   = 150 * time.Millisecond // between checks
 	pinKeyGap   = 120 * time.Millisecond // between passcode keys

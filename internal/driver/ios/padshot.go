@@ -31,7 +31,7 @@ type padShooter interface {
 // screenshot of the lock screen, and did not again; a read that runs out
 // of time counts as no pad, and the next look waits for it to finish
 // rather than start another.
-const padLookWait = 4 * time.Second
+const padLookWait = 12 * time.Second
 
 var errPadReadBusy = errors.New("an earlier read of a screenshot is still running")
 
