@@ -22,7 +22,7 @@ const (
 // secret, so the policy judges the field and the app. Text that holds no
 // reference passes untouched.
 func (g *Gateway) secretReady(a Action, p *prep) *Result {
-	name, isRef, err := vault.ParseRef(a.Text)
+	ref, isRef, err := vault.ParseValueRef(a.Text)
 	if err != nil {
 		return errResult(ErrInvalidArgument, "%v. Nothing was done.", err)
 	}
@@ -30,6 +30,17 @@ func (g *Gateway) secretReady(a Action, p *prep) *Result {
 		return nil
 	}
 	p.input.Secret = true
+	if ref.Kind == vault.RefCode {
+		p.code, p.input.Code = true, true
+		if p.lease == nil {
+			return errResult(ErrInternal, "a code reference was not checked. Nothing was done.")
+		}
+		if err := g.peekCode(p.lease); err != nil {
+			return errResult(ErrNotFound, "%v. Nothing was done.", err)
+		}
+		return nil
+	}
+	name := ref.Name
 	switch {
 	case g.opt.Secrets == nil:
 		return &Result{Status: StatusBlocked, Rule: policy.RuleCredentials, Message: noSecretStore}
@@ -63,10 +74,22 @@ func (e *secretRefused) Is(target error) bool { return target == driver.ErrNotFo
 // reference the staged value, taken now and so used up. A refusal wraps
 // driver.ErrNotFound, so the agent hears that nothing was done.
 func (g *Gateway) secretText(a Action, p *prep) (string, error) {
-	name, isRef, _ := vault.ParseRef(a.Text)
+	ref, isRef, _ := vault.ParseValueRef(a.Text)
 	if !isRef {
 		return a.Text, nil
 	}
+	if ref.Kind == vault.RefCode {
+		if p.lease == nil || !p.code {
+			return "", &secretRefused{"a code reference was not checked"}
+		}
+		digits, err := g.takeCode(p.lease)
+		if err != nil {
+			return "", &secretRefused{err.Error()}
+		}
+		defer clear(digits)
+		return string(digits), nil
+	}
+	name := ref.Name
 	if !p.input.Secret || g.opt.Secrets == nil {
 		return "", &secretRefused{"a secret reference was not checked"}
 	}

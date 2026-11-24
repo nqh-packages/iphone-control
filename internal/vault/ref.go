@@ -10,11 +10,12 @@ import (
 )
 
 const (
-	refOpen   = "{{secret:"
-	refClose  = "}}"
-	maxName   = 40
-	errMixed  = "a secret reference must be the whole text; type the rest in another phone_type"
-	errBadRef = "a secret reference is {{secret:NAME}}, NAME of 1-40 characters from a-z, 0-9, dot, dash and underscore"
+	refOpen      = "{{secret:"
+	refClose     = "}}"
+	maxName      = 40
+	errMixed     = "a secret reference must be the whole text; type the rest in another phone_type"
+	errMixedCode = "{{code}} must be the whole text; type the rest in another phone_type"
+	errBadRef    = "a secret reference is {{secret:NAME}}, NAME of 1-40 characters from a-z, 0-9, dot, dash and underscore"
 )
 
 // ParseRef reads the text of a phone_type. isRef is true when the whole text
@@ -51,4 +52,34 @@ func ValidName(name string) bool {
 		}
 	}
 	return true
+}
+
+type RefKind int
+
+const (
+	RefSecret RefKind = iota + 1
+	RefCode
+)
+
+const codeRef = "{{code}}"
+
+type ValueRef struct {
+	Kind RefKind
+	Name string
+}
+
+func CodeRef() string { return codeRef }
+
+func ParseValueRef(text string) (ValueRef, bool, error) {
+	if text == codeRef {
+		return ValueRef{Kind: RefCode}, true, nil
+	}
+	if strings.Contains(text, codeRef) {
+		return ValueRef{}, false, errors.New(errMixedCode)
+	}
+	name, ok, err := ParseRef(text)
+	if err != nil || !ok {
+		return ValueRef{}, false, err
+	}
+	return ValueRef{Kind: RefSecret, Name: name}, true, nil
 }

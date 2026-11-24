@@ -64,6 +64,10 @@ func (d *Device) TypeByKeys(on bool) {
 	d.mu.Unlock()
 }
 
+func (d *Device) mayPaste(opt driver.TypeOptions) bool {
+	return !opt.ByKeys && !d.byKeys()
+}
+
 func (d *Device) byKeys() bool {
 	d.mu.Lock()
 	defer d.mu.Unlock()
@@ -119,7 +123,7 @@ func (d *Device) typeText(ctx context.Context, text string, opt driver.TypeOptio
 		pbErr  error
 	)
 	if text != "" {
-		if pb = d.pasteboard(); pb != nil && !d.byKeys() {
+		if pb = d.pasteboard(); pb != nil && d.mayPaste(opt) {
 			t0 := time.Now()
 			saved, st.Saved, pbErr = savePasteboard(ctx, pb)
 			st.Save = time.Since(t0)

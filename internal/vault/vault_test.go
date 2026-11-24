@@ -392,3 +392,18 @@ func TestSocketNeedsAPrivateFolder(t *testing.T) {
 		t.Fatalf("an open folder was accepted: %v", err)
 	}
 }
+
+func TestParseValueRefKinds(t *testing.T) {
+	if r, ok, err := ParseValueRef(CodeRef()); !ok || err != nil || r.Kind != RefCode {
+		t.Fatalf("code ref: %+v %v %v", r, ok, err)
+	}
+	if r, ok, err := ParseValueRef(Ref("x1")); !ok || err != nil || r.Kind != RefSecret || r.Name != "x1" {
+		t.Fatalf("secret ref: %+v %v %v", r, ok, err)
+	}
+	if _, ok, err := ParseValueRef("hello"); ok || err != nil {
+		t.Fatalf("plain text: %v %v", ok, err)
+	}
+	if _, _, err := ParseValueRef("code {{code}} now"); err == nil {
+		t.Fatal("a code reference with neighbours must be refused")
+	}
+}

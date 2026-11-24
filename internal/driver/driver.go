@@ -338,6 +338,7 @@ type TapOptions struct {
 type TypeOptions struct {
 	Append bool // keep the field's current text
 	Submit bool // press Enter afterwards
+	ByKeys bool // type each character as a key event, never by paste
 }
 
 // App is an installed app.

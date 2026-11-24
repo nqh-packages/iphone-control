@@ -229,6 +229,7 @@ type lease struct {
 	created  time.Time
 	lastUsed time.Time
 	inflight int
+	code     codeSlot
 	ended    bool
 	endedBy  string // an Outcome
 	// baseline is the last screen the agent received, for diffs.

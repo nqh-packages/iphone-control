@@ -95,6 +95,13 @@ func MaskElements(els []screen.Element) ([]screen.Element, int) {
 			set(i, m)
 		}
 	}
+	for _, c := range digitRows(els) {
+		for _, i := range c.Elements {
+			if out == nil || !out[i].Masked {
+				set(i, "•")
+			}
+		}
+	}
 	if out == nil {
 		return els, 0
 	}
@@ -442,4 +449,156 @@ func isJoiner(r rune) bool { return r == ' ' || r == ' ' || r == '-' || r == '�
 // with spaces between them, so that digits next to it are part of the word.
 func isWordLetter(r rune) bool {
 	return unicode.IsLetter(r) && unicode.In(r, unicode.Latin, unicode.Greek, unicode.Cyrillic)
+}
+
+type CodeSpan struct {
+	Elements []int
+	Digits   []byte
+	Row      bool
+}
+
+const (
+	rowMin = 4
+	rowMax = 8
+)
+
+func FindCodes(els []screen.Element) []CodeSpan {
+	var out []CodeSpan
+	for _, i := range labelCodeElements(els) {
+		if d := labelDigits(els[i].Label); len(d) >= rowMin && len(d) <= rowMax {
+			out = append(out, CodeSpan{Elements: []int{i}, Digits: d})
+		}
+	}
+	return append(out, digitRows(els)...)
+}
+
+func labelCodeElements(els []screen.Element) []int {
+	masked, _ := MaskElements(els)
+	var idx []int
+	for i := range masked {
+		if masked[i].Masked && !els[i].Masked && masked[i].Label != els[i].Label {
+			idx = append(idx, i)
+		}
+	}
+	return idx
+}
+
+func asciiDigit(r rune) byte {
+	if r >= '０' {
+		return byte('0' + (r - '０'))
+	}
+	return byte(r)
+}
+
+func labelDigits(label string) []byte {
+	rs := []rune(label)
+	var d []byte
+	for _, s := range codeNumbers(rs) {
+		for _, r := range rs[s.start:s.end] {
+			if isDigit(r) {
+				d = append(d, asciiDigit(r))
+			}
+		}
+	}
+	return d
+}
+
+func oneDigit(e screen.Element) (byte, bool) {
+	rs := []rune(strings.TrimSpace(e.Label))
+	if len(rs) != 1 || !isDigit(rs[0]) || e.Bounds.Empty() || e.Role == screen.RoleInput || e.Role == screen.RoleButton {
+		return 0, false
+	}
+	return asciiDigit(rs[0]), true
+}
+
+func digitRows(els []screen.Element) []CodeSpan {
+	var cand []int
+	for i, e := range els {
+		if _, ok := oneDigit(e); ok && !coveredBy(els, cand, e.Bounds) {
+			cand = append(cand, i)
+		}
+	}
+	if len(cand) < rowMin {
+		return nil
+	}
+	sort.Slice(cand, func(a, b int) bool { return els[cand[a]].Bounds.Y < els[cand[b]].Bounds.Y })
+	var out []CodeSpan
+	for len(cand) > 0 {
+		cy, h := els[cand[0]].Bounds.Center().Y, els[cand[0]].Bounds.H
+		n := 0
+		for n < len(cand) && abs(els[cand[n]].Bounds.Center().Y-cy) <= max(h, 2)/2 {
+			n++
+		}
+		line := append([]int(nil), cand[:n]...)
+		cand = cand[n:]
+		if sp, ok := uniformRow(els, line); ok && codeContext(els, sp.Elements) {
+			out = append(out, sp)
+		}
+	}
+	return out
+}
+
+func coveredBy(els []screen.Element, idx []int, b screen.Rect) bool {
+	for _, j := range idx {
+		o := els[j].Bounds
+		if overlap(o.X, o.W, b.X, b.W)*2 > min(o.W, b.W) && overlap(o.Y, o.H, b.Y, b.H)*2 > min(o.H, b.H) {
+			return true
+		}
+	}
+	return false
+}
+
+func uniformRow(els []screen.Element, line []int) (CodeSpan, bool) {
+	if len(line) < rowMin || len(line) > rowMax {
+		return CodeSpan{}, false
+	}
+	sort.Slice(line, func(a, b int) bool { return els[line[a]].Bounds.X < els[line[b]].Bounds.X })
+	hs := make([]int, len(line))
+	for k, i := range line {
+		hs[k] = els[i].Bounds.H
+	}
+	sort.Ints(hs)
+	med := hs[len(hs)/2]
+	gaps := make([]int, 0, len(line)-1)
+	for k := 1; k < len(line); k++ {
+		a, b := els[line[k-1]].Bounds, els[line[k]].Bounds
+		gaps = append(gaps, b.X+b.W/2-(a.X+a.W/2))
+	}
+	sorted := append([]int(nil), gaps...)
+	sort.Ints(sorted)
+	gap := sorted[len(sorted)/2]
+	if gap <= 0 {
+		return CodeSpan{}, false
+	}
+	for _, h := range hs {
+		if abs(h-med)*4 > med {
+			return CodeSpan{}, false
+		}
+	}
+	for _, g := range gaps {
+		if abs(g-gap)*2 > gap {
+			return CodeSpan{}, false
+		}
+	}
+	d := make([]byte, len(line))
+	for k, i := range line {
+		d[k], _ = oneDigit(els[i])
+	}
+	return CodeSpan{Elements: line, Digits: d, Row: true}, true
+}
+
+func codeContext(els []screen.Element, row []int) bool {
+	in := map[int]bool{}
+	for _, i := range row {
+		in[i] = true
+	}
+	for i, e := range els {
+		if in[i] || e.Label == "" || len(codeNumbers([]rune(e.Label))) > 0 {
+			continue
+		}
+		if hasCodeWords(e.Label) || namesCode(e.Label) {
+			return true
+		}
+	}
+	return false
 }

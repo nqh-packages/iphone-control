@@ -66,3 +66,17 @@ seams:
       - Deposit
     allowed: []
     fix: "values enter the vault only through its socket (internal/vault/socket.go), so the credential broker's staging is the one way in. If another file really needs Deposit, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: code slot writer
+    package: github.com/DIYgod/pinky/internal/gateway
+    methods:
+      - keepShownCode
+    allowed:
+      - internal/gateway/codeslot.go
+    fix: "a one-time code enters the per-lease slot only from the raw read, before masking: keepCodeOf in internal/gateway/codeslot.go, called by observeOCR. If another read path really needs it, add its file to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: code slot hand-out
+    package: github.com/DIYgod/pinky/internal/gateway
+    methods:
+      - takeCode
+    allowed:
+      - internal/gateway/secrets.go
+    fix: "a shown code leaves the slot only in internal/gateway/secrets.go (secretText), just before the driver types it, like a staged secret. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."

@@ -1,0 +1,6 @@
+seams:
+  - name: code slot hand-out
+    package: example.test/internal/gateway
+    methods: [takeCode]
+    allowed: [internal/gateway/secrets.go]
+    fix: take a code only in internal/gateway/secrets.go

@@ -338,6 +338,21 @@ Staging a name that still holds a live secret is refused (`pinkyctl phone secret
 
 An app on `credential_apps` loses only the bundled **Finance apps** and **Password managers** blocks. Listing a password manager lifts its whole block, so the agent could read its screen: list only the apps a secret is typed into. Payments there still ask, the person's own blocked apps stay blocked, and read-only mode, scope and the task's app list still apply.
 
+#### A one-time code the phone shows: `{{code}}`
+
+A code shown on the phone's own screen, as one label ("Your code is 482913") or as a row of 4 to 8 one-digit elements, is masked in every read while **Hide codes from agents** is on (a row of digits counts as a code when another element on the screen talks about one). Before masking, the gateway keeps the newest code in memory, per lease, for 120 s. It never reaches agent output, logs, history or disk.
+
+`phone_type` with `"text":"{{code}}"` types it into the field the ref names, from the gateway, once:
+
+```sh
+pinkyctl phone call phone_type '{"ref":9,"text":"{{code}}"}'
+```
+
+- Into a row of 4 to 8 separate boxes (the ref is any one of them) it types by key events, never by paste, and reads boxes 1 to N-1 back before the last digit. On a mismatch it clears the boxes, retries once the other way (tapping each box), then stops without sending the last digit: `uncertain`, with counts only ("3 of 5 digits read back right").
+- The code is single use. A tap on a resend label (or a newer code on screen) drops it; a code the page rejected is never retyped, and after 2 rejected codes in a task `{{code}}` is refused. The count lives in memory.
+- Refused with a `fix:` line and nothing done: no code seen lately, a code older than 120 s, the text holds `{{code}}` with other text around it, or a target that is not a code field or a row of code boxes.
+- Unlike `{{secret:}}`, it needs no staged secret and no `credential_apps` entry: the value comes from the phone's own screen.
+
 ### phone_swipe
 
 | Argument | Type | Meaning |

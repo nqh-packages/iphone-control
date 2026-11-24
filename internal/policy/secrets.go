@@ -25,9 +25,12 @@ func (e *Engine) secretAppLocked(appID string) bool {
 // is a secret reference. It reports done when the verdict is a refusal;
 // otherwise the rest of Evaluate goes on with the check satisfied.
 func (e *Engine) secretVerdictLocked(in Input, kinds []Kind) (Verdict, bool) {
-	if in.Op != OpType || !IsCredentialField(in.Target) {
+	if in.Op != OpType || !(IsCredentialField(in.Target) || in.CodeGroup) {
 		return Verdict{Decision: Deny, Rule: RuleCredentials, Kinds: kinds,
 			Reason: "A secret goes only into a password or one-time-code field; this is not one. fix: pass the ref of the password or code field."}, true
+	}
+	if in.Code {
+		return Verdict{}, false
 	}
 	if !e.secretAppLocked(in.App.ID) {
 		if err := e.rulesDisk.err; err != nil {

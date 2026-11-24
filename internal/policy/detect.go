@@ -2,6 +2,7 @@ package policy
 
 import (
 	"regexp"
+	"sort"
 	"strings"
 	"unicode"
 
@@ -905,4 +906,46 @@ func hasKind(ks []Kind, k Kind) bool {
 		}
 	}
 	return false
+}
+
+func InputGroup(s *screen.Screen, at int) []int {
+	if s == nil || at < 0 || at >= len(s.Elements) {
+		return nil
+	}
+	t := s.Elements[at]
+	if !boxLike(t) {
+		return nil
+	}
+	var row []int
+	for i, e := range s.Elements {
+		if boxLike(e) && abs(e.Bounds.Center().Y-t.Bounds.Center().Y)*2 <= max(t.Bounds.H, 2) && abs(e.Bounds.H-t.Bounds.H)*4 <= t.Bounds.H {
+			row = append(row, i)
+		}
+	}
+	if len(row) < rowMin || len(row) > rowMax {
+		return nil
+	}
+	sort.Slice(row, func(a, b int) bool { return s.Elements[row[a]].Bounds.X < s.Elements[row[b]].Bounds.X })
+	found := false
+	for k, i := range row {
+		found = found || i == at
+		b := s.Elements[i].Bounds
+		if b.W*(len(row)+1) > s.Width {
+			return nil
+		}
+		if k > 0 {
+			p := s.Elements[row[k-1]].Bounds
+			if b.X < p.X+p.W-p.W/4 {
+				return nil
+			}
+		}
+	}
+	if !found {
+		return nil
+	}
+	return row
+}
+
+func boxLike(e screen.Element) bool {
+	return (e.Role == screen.RoleInput || e.Has(screen.StateEditable)) && !e.Bounds.Empty()
 }

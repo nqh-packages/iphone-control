@@ -109,6 +109,11 @@ type Input struct {
 	// Secret is set when the text is a secret reference (vault.ParseRef);
 	// its value is never in Text.
 	Secret bool // OpType
+	// Code is set when the text is {{code}}, the one-time code the
+	// phone showed; CodeGroup, when the target is one box of a row of
+	// code boxes (InputGroup).
+	Code      bool // OpType
+	CodeGroup bool // OpType
 	// Move is where a phone_swipe moves the finger, its end minus its
 	// start; zero when unknown (a pinch, a drag, a check without one).
 	Move screen.Point // OpSwipe

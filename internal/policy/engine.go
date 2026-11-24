@@ -198,7 +198,7 @@ func (e *Engine) Evaluate(in Input) Verdict {
 		if v, done := e.secretVerdictLocked(in, kinds); done {
 			return v
 		}
-	} else if in.Op == OpType && IsCredentialField(in.Target) && !(in.Virtual && e.file.VirtualCredentials) {
+	} else if in.Op == OpType && (IsCredentialField(in.Target) || in.CodeGroup) && !(in.Virtual && e.file.VirtualCredentials) {
 		reason := "Pinky never types into password or one-time-code fields; call phone_handoff so the person can fill it."
 		if in.Virtual {
 			reason += " On a virtual phone the person may allow it in Pinky's Settings › Safety."

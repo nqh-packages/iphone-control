@@ -415,6 +415,9 @@ func (g *Gateway) attachScreen(l *lease, res *Result, cur *screen.Screen) *Resul
 
 // prep is an action resolved against the current screen.
 type prep struct {
+	lease  *lease
+	boxes  []screen.Rect
+	code   bool
 	target *screen.Element
 	point  screen.Point
 	hasPt  bool
@@ -939,6 +942,11 @@ func (g *Gateway) prepare(ctx context.Context, l *lease, a Action, cur *screen.S
 			// The focused field is unknown and might be the password field.
 			return p, &Result{Status: StatusBlocked, Rule: policy.RuleCredentials,
 				Message: "This screen has a password or code field and Pinky cannot tell which field has focus. Nothing was done. Pass ref to type into a specific field, or call phone_handoff for credentials."}
+		}
+		p.lease = l
+		if a.Ref > 0 {
+			p.boxes = findGroup(cur, a.Ref)
+			p.input.CodeGroup = len(p.boxes) > 0
 		}
 		if res := g.secretReady(a, p); res != nil {
 			return p, res
@@ -2138,11 +2146,17 @@ func sameApp(a, b screen.App) bool {
 func (g *Gateway) perform(ctx context.Context, dev driver.Device, a Action, p *prep) error {
 	switch a.Tool {
 	case "tap":
+		if p.lease != nil && isResend(p.target) {
+			g.codeResent(p.lease)
+		}
 		return dev.Tap(ctx, p.point, driver.TapOptions{LongPress: a.LongPress})
 	case "type":
 		text, err := g.secretText(a, p)
 		if err != nil {
 			return err
+		}
+		if p.code {
+			return g.enterCode(ctx, dev, a, p, text)
 		}
 		if p.hasPt && p.target != nil && !p.target.Has(screen.StateFocused) {
 			if err := dev.Tap(ctx, p.point, driver.TapOptions{}); err != nil {
@@ -2210,6 +2224,10 @@ func (g *Gateway) perform(ctx context.Context, dev driver.Device, a Action, p *p
 func (g *Gateway) actionError(l *lease, err error) *Result {
 	if res := g.onPhoneResult(l, err); res != nil {
 		return res
+	}
+	var gs *groupStopped
+	if errors.As(err, &gs) {
+		return statusResult(StatusUncertain, "%s", gs.msg)
 	}
 	var se *driver.SetupError
 	if errors.As(err, &se) && se.Setup != "" {
@@ -2377,6 +2395,7 @@ func (g *Gateway) observeOCR(ctx context.Context, d *device, mode readOCR) (*scr
 	g.setBusy(d, nil)
 	// One-time codes are masked before anything else sees the read: the
 	// agent, history, approvals and refs (policy.MaskScreen).
+	g.keepCodeOf(d, s)
 	g.policy.MaskScreen(s)
 	g.maskSecrets(s)
 	// So are blocked apps' notifications and cards on other screens

@@ -1,0 +1,6 @@
+seams:
+  - name: code slot writer
+    package: example.test/internal/gateway
+    methods: [keepShownCode]
+    allowed: [internal/gateway/codeslot.go]
+    fix: keep a code only in internal/gateway/codeslot.go

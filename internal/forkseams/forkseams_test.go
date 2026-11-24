@@ -362,6 +362,8 @@ func TestForkSeamsGuardCatchesEachRule(t *testing.T) {
 		{"methodmissing", "symbol-missing", "internal/forkseams/seams.yaml", 1},
 		{"identuse", "seam-passcode-store-variables", "cmd/pinky/other.go", 4},
 		{"identmissing", "symbol-missing", "internal/forkseams/seams.yaml", 1},
+		{"codeslot", "seam-code-slot-hand-out", "cmd/other/use.go", 4},
+		{"codeslotwrite", "seam-code-slot-writer", "cmd/other/use.go", 4},
 	}
 	for _, r := range rows {
 		vs, err := check(filepath.Join("testdata", r.dir))
