@@ -13,6 +13,15 @@ seams:
       - cmd/pinky/autounlock.go
       - cmd/pinky/phone_pin.go
     fix: "get the passcode through gateway.Options.PIN, which cmd/pinky/autounlock.go wires; only the daemon wiring and the `phone pin` verbs build the store. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: no-prompt passcode store variables
+    package: github.com/DIYgod/pinky/cmd/pinky
+    idents:
+      - autoUnlockPINs
+      - phonePINs
+    allowed:
+      - cmd/pinky/autounlock.go
+      - cmd/pinky/phone_pin.go
+    fix: "the store's builder variables are named only by cmd/pinky/autounlock.go (the daemon) and cmd/pinky/phone_pin.go (the `phone pin` verbs). Another file gets a passcode through gateway.Options.PIN. If another file really needs one, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
   - name: secret vault
     package: github.com/DIYgod/pinky/internal/vault
     symbols:

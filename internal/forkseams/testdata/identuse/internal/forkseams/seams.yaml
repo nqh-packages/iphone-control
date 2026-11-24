@@ -1,0 +1,6 @@
+seams:
+  - name: passcode store variables
+    package: example.test/cmd/pinky
+    idents: [phonePINs]
+    allowed: [cmd/pinky/ok.go]
+    fix: use the wiring in cmd/pinky/ok.go

@@ -25,6 +25,9 @@ type seam struct {
 	// Methods are methods of the package's types, matched by name wherever
 	// a selector uses them: a file need not import the package to call one.
 	Methods []string `yaml:"methods"`
+	// Idents are package-level variables of the package's own directory,
+	// which only the allowed files of that directory may name.
+	Idents  []string `yaml:"idents"`
 	Allowed []string `yaml:"allowed"`
 	Fix     string   `yaml:"fix"`
 }
@@ -96,6 +99,7 @@ func check(root string) ([]violation, error) {
 		for _, s := range decl.Seams {
 			out = append(out, useOutsideAllowed(root, module, rel, s)...)
 			out = append(out, methodUseOutsideAllowed(root, module, rel, s)...)
+			out = append(out, identUseOutsideAllowed(root, module, rel, s)...)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -163,6 +167,58 @@ func declarationProblems(root, module string, s seam, seen map[string]bool) []vi
 			problem("symbol-missing", m+" is not a method declared in package "+s.Package)
 		}
 	}
+	vars := declaredVars(filepath.Join(root, filepath.FromSlash(packageDir(module, s.Package))))
+	for _, v := range s.Idents {
+		key := s.Package + ".(var)." + v
+		if seen[key] {
+			problem("symbol-declared-twice", key+" is declared in more than one seam")
+		}
+		seen[key] = true
+		if !vars[v] {
+			problem("symbol-missing", v+" is not a package-level variable declared in package "+s.Package)
+		}
+	}
+	return out
+}
+
+func declaredVars(dir string) map[string]bool {
+	out := map[string]bool{}
+	pkgs, _ := parser.ParseDir(token.NewFileSet(), dir, func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	for _, p := range pkgs {
+		for _, f := range p.Files {
+			for _, d := range f.Decls {
+				if gd, ok := d.(*ast.GenDecl); ok && gd.Tok == token.VAR {
+					for _, sp := range gd.Specs {
+						for _, n := range sp.(*ast.ValueSpec).Names {
+							out[n.Name] = true
+						}
+					}
+				}
+			}
+		}
+	}
+	return out
+}
+
+// identUseOutsideAllowed finds every mention of a seam's package variables
+// in a file of the declaring directory that is not allowed to name them.
+func identUseOutsideAllowed(root, module, rel string, s seam) []violation {
+	if len(s.Idents) == 0 || path.Dir(rel) != packageDir(module, s.Package) || slices.Contains(s.Allowed, rel) {
+		return nil
+	}
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil, 0)
+	if err != nil {
+		return []violation{{File: rel, Line: 1, Rule: "unparsable", What: err.Error(), Fix: "fix the syntax error"}}
+	}
+	var out []violation
+	ast.Inspect(f, func(n ast.Node) bool {
+		if id, ok := n.(*ast.Ident); ok && slices.Contains(s.Idents, id.Name) {
+			out = append(out, violation{File: rel, Line: fset.Position(id.Pos()).Line, Rule: "seam-" + strings.ReplaceAll(s.Name, " ", "-"),
+				What: id.Name + " is used outside the files that may use it", Fix: s.Fix})
+		}
+		return true
+	})
 	return out
 }
 
@@ -304,6 +360,8 @@ func TestForkSeamsGuardCatchesEachRule(t *testing.T) {
 		{"nosymbol", "symbol-missing", "internal/forkseams/seams.yaml", 1},
 		{"method", "seam-secret-hand-out", "cmd/other/use.go", 4},
 		{"methodmissing", "symbol-missing", "internal/forkseams/seams.yaml", 1},
+		{"identuse", "seam-passcode-store-variables", "cmd/pinky/other.go", 4},
+		{"identmissing", "symbol-missing", "internal/forkseams/seams.yaml", 1},
 	}
 	for _, r := range rows {
 		vs, err := check(filepath.Join("testdata", r.dir))
@@ -346,7 +404,7 @@ func TestForkSeamsAllowedFilesExistAndUseTheSeam(t *testing.T) {
 				continue
 			}
 			var uses bool
-			for _, sym := range append(slices.Clone(s.Symbols), s.Methods...) {
+			for _, sym := range append(append(slices.Clone(s.Symbols), s.Methods...), s.Idents...) {
 				uses = uses || strings.Contains(string(b), sym)
 			}
 			if !uses {
