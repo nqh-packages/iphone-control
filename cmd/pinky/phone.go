@@ -80,6 +80,7 @@ func phoneUsage(w io.Writer) {
   pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
   pinkyctl phone pin (set | check | delete) [-device D]
   pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
+  pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID]
 
 status prints one JSON line: free, device, holder, task, reserved_for,
 reserved_left_s, waiting, link, health. tools lists the gateway's phone_*
@@ -90,6 +91,9 @@ that session.
 
 pin saves the passcode the daemon enters when a call finds the phone locked
 (PINKY_AUTO_UNLOCK=1); run pinkyctl phone pin help.
+
+fill types a saved login's password into a field through the credential broker;
+run pinkyctl phone fill -h.
 
 secret put stages a secret from the credential broker for one app, for
 phone_type's {{secret:NAME}}; run pinkyctl phone secret help.
@@ -121,6 +125,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneRunCmd(args[1:], pio)
 	case "pin":
 		return phonePinCmd(args[1:], pio)
+	case "fill":
+		return phoneFillCmd(args[1:], pio)
 	case "secret":
 		return phoneSecretCmd(args[1:], pio)
 	case "help", "-h", "--help", "-help":

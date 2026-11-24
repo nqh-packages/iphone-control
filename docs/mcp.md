@@ -330,6 +330,8 @@ What is refused, each with a `fix:` line and nothing done:
 - a secret that is not staged, expired, used, or staged for another app than the one in front (`not_found`; the message does not say which app a name was staged for);
 - a daemon with no vault (`blocked_by_policy`).
 
+**One command for both steps:** `pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID]` runs the broker (`cred run`) for the saved login, stages the password under a fresh name for the app on screen (read from the screen unless `-app` names it) and types it with `phone_type`. The owner approves each use in the broker. Exit 5 means the owner did not approve.
+
 Staging a name that still holds a live secret is refused (`pinkyctl phone secret put` says so, with a fix line): use another name, or wait until it is used or expires. A driver failure while a secret is typed is reported as "typing the secret failed; check the field and stage it again", without the driver's text. While `rules.yaml` cannot be read, no secret is staged or typed anywhere.
 
 An app on `credential_apps` loses only the bundled **Finance apps** and **Password managers** blocks. Listing a password manager lifts its whole block, so the agent could read its screen: list only the apps a secret is typed into. Payments there still ask, the person's own blocked apps stay blocked, and read-only mode, scope and the task's app list still apply.
@@ -725,6 +727,7 @@ pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=
 pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
 pinkyctl phone pin (set | check | delete) [-device D]
 pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
+pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID]
 ```
 
 `status` prints one JSON line and takes no lease: `{"free":true,"device":"iPhone SE","holder":null,"task":null,"reserved_for":null,"reserved_left_s":0,"waiting":0,"link":"usb","health":"idle"}`. `free` is false while someone holds the phone, waits in line, or the person has it; a phone kept for a name after its `phone_release` is free for that name only (`-as`). `health` is the phone's status as `pinkyctl devices --json` gives it.
