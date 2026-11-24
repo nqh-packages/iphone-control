@@ -77,6 +77,7 @@ type connectIn struct {
 	OwnScreen  bool   `json:"own_screen,omitempty" jsonschema:"Work on the phone's own screen even when the person has Pinky work on a background display, which has no home screen. Only for work on the home screen itself: moving app icons, making folders, widgets. If the person used the phone in the last minute, the task starts paused until they hand it over; if it is locked, they unlock it."`
 	Connection string `json:"connection,omitempty" jsonschema:"iPhone only: how Pinky connects to the phone for this task. auto (default): Pinky chooses, and moves the task to Pinky on the iPhone when phone_launch opens an app known to refuse screen sharing (DBS digibank, China Merchants Bank), once the launch may run. helper: Pinky on the iPhone (WebDriverAgent), which shares no screen, for apps that refuse screen sharing; slower. coredevice: back to the faster CoreDevice. The phone returns to the person's choice after the task; a connection the person fixed in Settings is kept, and nothing moves while the person is in control, the phone is locked or an approval is open."`
 	ApprovalID string `json:"approval_id,omitempty" jsonschema:"From an approval_pending result: repeat the same call with the same arguments and this id to keep waiting for the person's answer."`
+	WaitMS     int    `json:"wait_ms,omitempty" jsonschema:"Wait for the phone instead of returning lease_held at once: first come first served, up to this many ms (at most 600000). One call waits up to about 30 s, then returns lease_held with your place in line; call phone_connect again within 5 s to keep it."`
 }
 
 type releaseIn struct {
@@ -425,12 +426,16 @@ func (s *Server) addTools(srv *sdk.Server, remote bool) {
 			"Another session's phone returns lease_held, and so does a phone that runs another task of yours: end that task with phone_release first. A phone that waits for the person to do a step before Pinky can use it (trust this computer, allow USB debugging, Developer Mode) " +
 			"returns device_needs_setup with the step: ask the person with phone_handoff. A phone the person paused in Pinky returns device_paused: " +
 			"ask them to resume it, or use another phone. Call phone_release when done.",
-		InputSchema: schema[connectIn](func(p map[string]*jsonschema.Schema) { enum(p["connection"], "auto", "helper", "coredevice") }),
+		InputSchema: schema[connectIn](func(p map[string]*jsonschema.Schema) {
+			enum(p["connection"], "auto", "helper", "coredevice")
+			bounds(p["wait_ms"], 0, 600000)
+		}),
 		Annotations: &sdk.ToolAnnotations{OpenWorldHint: boolp(false)}},
 		func(ctx context.Context, req *sdk.CallToolRequest, in connectIn) (*sdk.CallToolResult, any, error) {
 			return render(s.session(req, remote).Connect(ctx, gateway.ConnectRequest{
 				Call: gateway.Call{Device: strings.TrimSpace(in.Device), ApprovalID: strings.TrimSpace(in.ApprovalID), Progress: progress(ctx, req)},
-				Task: in.Task, Apps: in.Apps, ReadOnly: in.ReadOnly, OwnScreen: in.OwnScreen, Connection: in.Connection})), nil, nil
+				Task: in.Task, Apps: in.Apps, ReadOnly: in.ReadOnly, OwnScreen: in.OwnScreen, Connection: in.Connection,
+				Wait: time.Duration(in.WaitMS) * time.Millisecond})), nil, nil
 		})
 
 	sdk.AddTool(srv, &sdk.Tool{Name: "phone_release", Title: "Release the phone",

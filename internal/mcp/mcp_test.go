@@ -662,3 +662,32 @@ func TestPhoneDrag(t *testing.T) {
 		t.Fatalf("batch input %+v", in)
 	}
 }
+
+func TestConnectWait(t *testing.T) {
+	h := newHarness(t)
+	first := h.connect(t, "worker-a")
+	first.call(t, "phone_connect", map[string]any{"task": "First"})
+	second := h.connect(t, "worker-b")
+	if text, _ := second.call(t, "phone_connect", map[string]any{"task": "Second"}); !strings.Contains(text, "lease_held") {
+		t.Fatalf("without wait_ms the phone is held:\n%s", text)
+	}
+	got := make(chan string, 1)
+	go func() {
+		text, _ := second.call(t, "phone_connect", map[string]any{"task": "Second", "wait_ms": 5000})
+		got <- text
+	}()
+	select {
+	case text := <-got:
+		t.Fatalf("answered while the phone was held:\n%s", text)
+	case <-time.After(100 * time.Millisecond):
+	}
+	first.call(t, "phone_release", nil)
+	select {
+	case text := <-got:
+		if !strings.HasPrefix(text, "settled") {
+			t.Fatalf("after the release the waiter should get the phone:\n%s", text)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("the waiting phone_connect was not answered after the release")
+	}
+}
