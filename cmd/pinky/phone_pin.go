@@ -8,7 +8,10 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"strings"
+	"sync"
+	"syscall"
 
 	"github.com/DIYgod/pinky/internal/api"
 	"github.com/DIYgod/pinky/internal/gateway"
@@ -200,13 +203,48 @@ func readPinInput(file string, pio phoneIO) ([]byte, error) {
 	}
 	if f, ok := pio.in.(*os.File); ok {
 		if restore, err := echoOff(int(f.Fd())); err == nil {
-			defer restore()
+			defer withTerminalRestored(restore)()
 			fmt.Fprint(pio.err, "Passcode (not shown): ")
 			defer fmt.Fprintln(pio.err)
 		}
 	}
 	return readPinLine(pio.in)
 }
+
+// withTerminalRestored makes restore run once, when the returned function is
+// called or when SIGINT or SIGTERM arrives first, so Ctrl-C at the prompt
+// cannot leave the terminal with echo off. After a signal it exits with the
+// conventional 128 plus the signal's number.
+func withTerminalRestored(restore func()) (done func()) {
+	var once sync.Once
+	run := func() { once.Do(restore) }
+	sigs := make(chan os.Signal, 1)
+	stop := make(chan struct{})
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		select {
+		case sig := <-sigs:
+			run()
+			code := 130
+			if sig == syscall.SIGTERM {
+				code = 143
+			}
+			exitProcess(code)
+		case <-stop:
+		}
+	}()
+	var end sync.Once
+	return func() {
+		end.Do(func() {
+			signal.Stop(sigs)
+			close(stop)
+		})
+		run()
+	}
+}
+
+// exitProcess ends the process; tests replace it.
+var exitProcess = os.Exit
 
 // readPinLine reads exactly one line: empty input and a second line are
 // refused.

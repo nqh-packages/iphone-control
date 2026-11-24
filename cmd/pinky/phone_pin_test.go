@@ -6,7 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/DIYgod/pinky/internal/secret"
 )
@@ -301,5 +303,46 @@ func TestScrubFileLeavesAPathSwappedForAnotherFile(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(moved); len(bytes.Trim(b, "\x00")) != 0 {
 		t.Fatalf("the opened file was not zeroed: %q", b)
+	}
+}
+
+func TestTerminalIsRestoredOnEveryExitPath(t *testing.T) {
+	t.Run("normal return", func(t *testing.T) {
+		n := 0
+		done := withTerminalRestored(func() { n++ })
+		done()
+		done()
+		if n != 1 {
+			t.Fatalf("restore ran %d times, want once", n)
+		}
+	})
+	for name, sig := range map[string]syscall.Signal{"SIGINT": syscall.SIGINT, "SIGTERM": syscall.SIGTERM} {
+		t.Run(name, func(t *testing.T) {
+			exited := make(chan int, 1)
+			old := exitProcess
+			exitProcess = func(code int) { exited <- code }
+			t.Cleanup(func() { exitProcess = old })
+			restored := make(chan struct{}, 2)
+			done := withTerminalRestored(func() { restored <- struct{}{} })
+			defer done()
+			self, err := os.FindProcess(os.Getpid())
+			if err == nil {
+				err = self.Signal(sig)
+			}
+			if err != nil {
+				t.Skipf("this system cannot signal itself: %v", err)
+			}
+			select {
+			case code := <-exited:
+				if len(restored) != 1 {
+					t.Fatalf("exit %d, but the terminal was restored %d times first", code, len(restored))
+				}
+				if want := 128 + int(sig); code != want {
+					t.Fatalf("exit code %d, want %d", code, want)
+				}
+			case <-time.After(3 * time.Second):
+				t.Fatalf("%s did not restore the terminal and exit", name)
+			}
+		})
 	}
 }
