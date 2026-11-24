@@ -289,9 +289,48 @@ A passcode keypad that the app draws where screenshots do not reach (iOS marks i
 | `append` | boolean | Keep the field's text |
 | `submit` | boolean | Press Enter afterwards |
 
-Typing into password and one-time-code fields is refused (`blocked_by_policy`, rule `credentials`). So is typing without `ref` when no field reports focus and the screen has such a field. The one exception is a virtual phone, an emulator or a Simulator on this computer, while the person has turned on Settings › Safety › **Allow passwords on virtual phones** (`virtual_credentials` in rules.yaml, off by default), for testing sign-ins with test accounts: there these go through, and agents should type only what their task gives them. Phones are refused either way.
+Typing into password and one-time-code fields is refused (`blocked_by_policy`, rule `credentials`). So is typing without `ref` when no field reports focus and the screen has such a field. The one exception is a virtual phone, an emulator or a Simulator on this computer, while the person has turned on Settings › Safety › **Allow passwords on virtual phones** (`virtual_credentials` in rules.yaml, off by default), for testing sign-ins with test accounts: there these go through, and agents should type only what their task gives them. Phones are refused either way, except for a secret reference ([below](#credential-typing)).
 
 Pinky reads the field back after typing. Text that reads otherwise, or that went nowhere (no field has focus, or the field reads as before or empty), returns `uncertain` with the reason, and Return is not pressed for `submit`. When the field cannot be read back (an app that draws its own field), Pinky compares what the app shows before and after: the text showing up counts as typed, and an app that shows exactly what it did before returns `uncertain` without pressing Return. On an iPhone that usually means iOS asked the person to Allow Paste, a prompt Pinky cannot see, because the app reads pasted text itself; the message says to call `phone_handoff` so the person can answer Don't Allow and set Settings › the app › Paste from Other Apps to Allow, then to type again. Otherwise, and for a field that hides its text, the result is `settled` with a note saying so.
+
+### Credential typing
+
+An agent can sign in to an app the owner allows without ever holding the password or code. The owner's credential broker stages the secret, and the agent types a reference to it.
+
+1. The owner lists the apps, by exact bundle id or package name, in rules.yaml (agents cannot edit it):
+
+   ```yaml
+   credential_apps:
+     - com.example.bank
+   ```
+
+2. The agent asks the broker to stage the secret. The broker waits for the owner's approval on their phone, then runs the CLI with the secret on its stdin:
+
+   ```sh
+   cred run --login lg_ab12 --reason "Sign in to the bank app on the agents' iPhone" \
+     --stdin '{password}' -- pinkyctl phone secret put -app com.example.bank bank-pw
+   # {"staged":["bank-pw"],"app":"com.example.bank","expires_in_s":120}
+   ```
+
+   `put` reads one line from stdin for each `NAME` (1-40 characters from `a-z`, `0-9`, `.`, `-`, `_`; no echo on a terminal) and hands them to the daemon's vault over a socket in the private runtime folder (`vault.sock`, mode 0600, this user only). Each secret lasts 120 s (`-ttl` up to 300 s), is bound to that one app, is used once, and is at least 4 characters. It lives in memory only: a daemon restart drops it. For a one-time code use `--stdin '{otp}'` and a short `-ttl`.
+
+3. The agent calls `phone_type` with the reference alone as `text`, into the password or code field:
+
+   ```sh
+   pinkyctl phone call phone_type '{"ref":14,"text":"{{secret:bank-pw}}","submit":true}'
+   # settled: Typed “{{secret:bank-pw}}” into Password and submitted
+   ```
+
+The gateway swaps the value in at the last moment, just before the driver types it. The result, the step text, history, approvals, logs and exports hold only the reference. The value is masked (`••••`) in every later read of the screen, event and OCR line for 10 minutes, and the field is covered in screenshots, so typing a secret is refused while Settings › Safety › **Hide codes from agents** is off.
+
+What is refused, each with a `fix:` line and nothing done:
+
+- text that holds `{{secret:` but is not exactly one reference (`invalid_argument`);
+- a reference into anything but a password or one-time-code field, or into an app that is not on `credential_apps` (`blocked_by_policy`, rule `credentials`); literal text into those fields is refused everywhere, as ever;
+- a secret that is not staged, expired, used, or staged for another app than the one in front (`not_found`);
+- a daemon with no vault (`blocked_by_policy`).
+
+An app on `credential_apps` loses only the bundled **Finance apps** and **Password managers** blocks. Payments there still ask, the person's own blocked apps stay blocked, and read-only mode, scope and the task's app list still apply.
 
 ### phone_swipe
 
@@ -683,6 +722,7 @@ pinkyctl phone tools [--json] [name]
 pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
 pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
 pinkyctl phone pin (set | check | delete) [-device D]
+pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
 ```
 
 `status` prints one JSON line and takes no lease: `{"free":true,"device":"iPhone SE","holder":null,"task":null,"reserved_for":null,"reserved_left_s":0,"waiting":0,"link":"usb","health":"idle"}`. `free` is false while someone holds the phone, waits in line, or the person has it; a phone kept for a name after its `phone_release` is free for that name only (`-as`). `health` is the phone's status as `pinkyctl devices --json` gives it.

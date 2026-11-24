@@ -27,6 +27,8 @@
 # Built in and not editable here: typing into password and one-time-code
 # fields is always denied (rule: credentials), and apps you block in Settings
 # (the "blocked" category in apps.yaml) are denied (rule: Blocked by you).
+# The one exception is a secret from your credential broker: see
+# credential_apps below.
 #
 # always_allow (at the end of the file once there is one) keeps your "Always
 # allow" answers to approvals. Each entry lifts, in one app, the rule the
@@ -57,6 +59,14 @@ mask_codes: true
 # Let agents type passwords and one-time codes on virtual phones (emulators
 # and Simulators on this computer), for testing sign-ins. Phones never.
 virtual_credentials: false
+
+# Apps where agents may type a secret that your credential broker staged
+# ({{secret:NAME}} in phone_type), into password and one-time-code fields.
+# Bundle ids or package names, exact. An app on the list is not blocked by
+# Finance apps or Password managers; its payments still ask, and apps you
+# blocked stay blocked. Literal text into those fields is denied as ever.
+# Only you edit this list; agents cannot.
+credential_apps: []
 
 rules:
   - name: Finance apps

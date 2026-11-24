@@ -38,3 +38,17 @@ Where the build differs from `extras-design-opus.md`, 2026-11-24:
 - Per-device turn in `autoUnlock`, so overlapping calls enter the one PIN once.
 - `internal/forkseams` guards `secret.NewAgentPINs` and `NewAgentPINsOn`; the seam is declared in `seams.yaml`, and `CLAUDE.md` (`AGENTS.md`) says how to extend it.
 - Unproven until device steps 10 and 11: that the keychain's no-prompt flag alone stops the legacy access-list prompt in the daemon, the status codes of a locked keychain and of a denied read, and `unlockEstimate`.
+
+## Slice 2 (credentials) as built
+
+Where the build differs from `extras-design-opus.md`, 2026-11-24:
+
+- `vault.New` takes the policy's `SecretApp` check, asked at `Put` and again at `TakeSecret`, so taking an app off `credential_apps` strands a secret already staged for it. A value shorter than 4 characters is refused at staging: the masker cannot hide a string that short without blanking ordinary text. At most 16 secrets are staged at once.
+- `StageSecret`, `Listen` and `Serve` are in `internal/vault/socket.go`; the CLI is `cmd/pinky/phone_secret.go` and the daemon wiring `cmd/pinky/secrets.go`. The vault always starts with the daemon (it is inert while `credential_apps` is empty); a socket that cannot start leaves the gateway with no vault, so every reference is refused with a fix line. The socket is `<runtime folder>/vault.sock`; `Listen` refuses a folder that is open to other users.
+- The gateway hooks are `secretReady` (in `prepare`, end of the type case), `secretText` (in `perform`) and `maskSecrets` (in `observeOCR`). `secretText` takes the value before the focusing tap, as designed, so a failed tap spends the secret. A driver error that carries the value is scrubbed (`scrubSecret`). A reference that reaches `perform` without `secretReady` having marked it is refused.
+- `secretReady` leaves "not on the list" to the policy, so the person reads one reason (`credential_apps`); it checks only the shape, the store, Hide codes and that the value is staged for the app in front. The policy checks the field first, so a reference into a chat field in an unlisted app is refused as "not a password field".
+- The approval card shows the usual title ("Type into “Password”?"), not the reference.
+- `maskRead` is a package variable so the canary test can switch masking off and prove it fails (`TestSecretCanaryFailsWithoutMasking`).
+- The seam guard learned **methods**: a seam may list `methods`, matched by name in any file not allowed (a file need not import the package). Rows: `secret vault` (`New`, `Listen`), `secret staging` (`StageSecret`), `secret hand-out` (`TakeSecret`) and `secret store input` (`Put`, no file outside the package).
+- `phone_type`'s `text` schema description names `{{secret:NAME}}`, so agents learn it from `tools/list` (`TestCredentialReference`).
+- Unproven until device step 12: the iOS driver's `Type` pastes through the phone's pasteboard (`internal/driver/ios/type.go`), so a secret may sit on it for a moment, and iOS may show a secure field's last typed character; whether WDA reports a secure field's value as dots or empty; that a recording of the typed step shows only dots (recordings are never covered); the peer-uid check of the socket was not tested against a second user.

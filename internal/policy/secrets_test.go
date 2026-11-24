@@ -119,7 +119,11 @@ func TestSecretLift(t *testing.T) {
 func TestCredentialAppsFile(t *testing.T) {
 	dir := t.TempDir()
 	rules, apps := filepath.Join(dir, "rules.yaml"), filepath.Join(dir, "apps.yaml")
-	if err := os.WriteFile(rules, append(DefaultRulesYAML(), []byte("\ncredential_apps:\n  - com.example.shop\n")...), 0o600); err != nil {
+	edited := strings.Replace(string(DefaultRulesYAML()), "credential_apps: []", "credential_apps:\n  - com.example.shop", 1)
+	if edited == string(DefaultRulesYAML()) {
+		t.Fatal("the bundled rules file has no credential_apps line to edit")
+	}
+	if err := os.WriteFile(rules, []byte(edited), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	e, err := Load(rules, apps)
