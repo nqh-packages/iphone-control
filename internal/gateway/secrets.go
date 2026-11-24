@@ -97,6 +97,7 @@ func (g *Gateway) secretText(a Action, p *prep) (string, error) {
 	if err != nil {
 		return "", &secretRefused{err.Error() + "." + secretFix(name, p.input.App, err)}
 	}
+	g.markCredentialTyped(p.lease)
 	return value, nil
 }
 

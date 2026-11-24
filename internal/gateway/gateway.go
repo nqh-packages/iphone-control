@@ -19,6 +19,7 @@ import (
 	"github.com/DIYgod/pinky/internal/approval"
 	"github.com/DIYgod/pinky/internal/driver"
 	"github.com/DIYgod/pinky/internal/history"
+	"github.com/DIYgod/pinky/internal/interrupt"
 	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/internal/secret"
 	"github.com/DIYgod/pinky/internal/tailnet"
@@ -92,6 +93,9 @@ type Options struct {
 	// Secrets resolves {{secret:NAME}} in phone_type, from values the
 	// owner's credential broker staged. Nil refuses every reference.
 	Secrets *vault.Vault
+	// Interrupts is the book of surprise screens the gateway clears by
+	// itself; nil clears none (interrupts.go).
+	Interrupts *interrupt.Book
 
 	// Pinky's traffic capture (capture.go). TrafficPort is the proxy's
 	// port, default TrafficPort; TrafficSetupPort the port of its setup

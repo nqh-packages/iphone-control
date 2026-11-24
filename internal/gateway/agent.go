@@ -8,12 +8,11 @@ import (
 	"sort"
 	"strings"
 	"time"
-	"unicode"
-	"unicode/utf8"
 
 	"github.com/DIYgod/pinky/internal/approval"
 	"github.com/DIYgod/pinky/internal/driver"
 	"github.com/DIYgod/pinky/internal/history"
+	"github.com/DIYgod/pinky/internal/interrupt"
 	"github.com/DIYgod/pinky/internal/screen"
 )
 
@@ -168,7 +167,8 @@ type Call struct {
 	reuse bool
 	// noAsk refuses an action the rules would ask the person about,
 	// instead of asking: phone_read_list never opens an approval.
-	noAsk bool
+	noAsk        bool
+	noInterrupts bool
 	// unread sends the action without waiting for the screen to settle
 	// or reading it afterwards: the settle stays owed, and the caller
 	// reads the screen in a later call. phone_read_list's last swipe on a
@@ -204,6 +204,9 @@ type ConnectRequest struct {
 	// lease_held at once: the call waits while it may, then returns lease_held
 	// with the session's place in line; calling again within ticketGrace keeps it.
 	Wait time.Duration
+	// Expect names the contexts this task starts, such as sign-in: the
+	// interrupt entries that need one fire only for a task that declared it.
+	Expect []string
 }
 
 // ReleaseRequest is phone_release.
@@ -707,6 +710,9 @@ func (s *Session) connect(ctx context.Context, req ConnectRequest) *Result {
 		if req.ReadOnly {
 			l.readOnly, l.task.readOnly = true, true
 		}
+		if len(req.Expect) > 0 {
+			g.setExpects(l, req.Expect)
+		}
 		l.inflight++
 		ro := l.readOnly
 		shared := s.shared
@@ -730,6 +736,7 @@ func (s *Session) connect(ctx context.Context, req ConnectRequest) *Result {
 	l := g.newLeaseLocked(s, d, title, req.Apps)
 	continued := l.task.continued
 	l.readOnly, l.task.readOnly = req.ReadOnly, req.ReadOnly
+	g.setExpects(l, req.Expect)
 	l.inflight++
 	shared := g.noteSharedLocked(s)
 	g.mu.Unlock()
@@ -1557,6 +1564,7 @@ func (s *Session) WaitFor(ctx context.Context, req WaitForRequest) *Result {
 	// elements, which tree reads leave out: read with OCR as well, at most
 	// once a second, and count its answer until the next such read.
 	var lastOCR time.Time
+	var interrupted cleared
 	ocrShown := ""
 	// shown is the text the last reads found, the first in the order given:
 	// the one that appeared, or the one that keeps a Gone wait waiting.
@@ -1578,8 +1586,10 @@ func (s *Session) WaitFor(ctx context.Context, req WaitForRequest) *Result {
 		evs := append([]screen.Event(nil), l.dev.events...)
 		g.mu.Unlock()
 		shown = screenShows(view, evs, texts, area)
+		ocrSeen := cur
 		if shown == "" && time.Since(lastOCR) >= waitForOCREvery {
 			if o, err := g.observeOCR(ctx, l.dev, ocrAll); err == nil {
+				ocrSeen = o
 				lastOCR = time.Now()
 				ov, _ := g.agentView(l, o)
 				ocrShown = screenShows(ov, evs, texts, area)
@@ -1594,6 +1604,12 @@ func (s *Session) WaitFor(ctx context.Context, req WaitForRequest) *Result {
 		if (shown != "") != req.Gone {
 			matched = true
 			break
+		}
+		out, after := g.clearInterrupts(ctx, l, ocrSeen)
+		interrupted.merge(out)
+		if out.acted() {
+			cur = after
+			continue
 		}
 		if !time.Now().Before(deadline) {
 			break
@@ -1620,6 +1636,9 @@ func (s *Session) WaitFor(ctx context.Context, req WaitForRequest) *Result {
 		took = time.Since(start)
 	}
 	res.Message = waitMessage(texts, shown, req.Gone, matched, area != nil, took)
+	if note := interrupted.note(); note != "" {
+		res.Message = note + "\n" + res.Message
+	}
 	args := map[string]any{"gone": req.Gone, "timeout_ms": req.TimeoutMS}
 	rest := texts
 	if strings.TrimSpace(req.Text) != "" {
@@ -1725,39 +1744,7 @@ func screenShows(s *screen.Screen, evs []screen.Event, texts []string, area *scr
 // waiting for "Stop" is not answered by the "Stopwatch" tab already on the
 // screen; Chinese, Japanese, Korean and Thai text matches anywhere, as
 // their words run together.
-func containsText(label, text string) bool {
-	l, t := strings.ToLower(label), strings.ToLower(text)
-	if t == "" {
-		return false
-	}
-	first, _ := utf8.DecodeRuneInString(t)
-	last, _ := utf8.DecodeLastRuneInString(t)
-	for i := 0; i <= len(l); {
-		j := strings.Index(l[i:], t)
-		if j < 0 {
-			return false
-		}
-		start, end := i+j, i+j+len(t)
-		before, _ := utf8.DecodeLastRuneInString(l[:start])
-		after, _ := utf8.DecodeRuneInString(l[end:])
-		if !(wordRune(before) && wordRune(first)) && !(wordRune(last) && wordRune(after)) {
-			return true
-		}
-		_, size := utf8.DecodeRuneInString(l[start:])
-		i = start + size
-	}
-	return false
-}
-
-// wordRune reports whether r is a letter or digit of a script that
-// separates its words with spaces.
-func wordRune(r rune) bool {
-	if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
-		return false
-	}
-	return !unicode.In(r, unicode.Han, unicode.Hiragana, unicode.Katakana, unicode.Hangul,
-		unicode.Thai, unicode.Lao, unicode.Khmer, unicode.Myanmar)
-}
+func containsText(label, text string) bool { return interrupt.ContainsText(label, text) }
 
 // Apps implements phone_apps: installed apps inside the agent's scope.
 // Blocked apps are not listed.

@@ -1,0 +1,7 @@
+entries:
+  - name: tap-anything
+    kind: dismiss
+    when:
+      button: "OK"
+    do:
+      - tap: "OK"

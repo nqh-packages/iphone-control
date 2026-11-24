@@ -1,0 +1,5 @@
+screen 400x800 · app: Settings (com.apple.Preferences) · portrait · keyboard hidden
+[1] text "Personalised Ads" @200,120
+[2] text "Apple uses your information to show ads that are relevant to you." @200,300
+[3] button "Turn On Personalised Ads" @200,680 disabled
+[4] button "Turn Off Personalised Ads" @200,740 disabled

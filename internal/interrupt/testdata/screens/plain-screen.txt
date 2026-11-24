@@ -1,0 +1,4 @@
+screen 400x800 · app: Safari (com.apple.mobilesafari) · portrait · keyboard hidden
+[1] text "Welcome" @200,300
+[2] button "Cancel" @200,420
+[3] button "Not Now" @200,480

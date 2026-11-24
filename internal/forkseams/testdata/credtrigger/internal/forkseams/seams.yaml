@@ -1,0 +1,6 @@
+seams:
+  - name: credential trigger writer
+    package: example.test/internal/gateway
+    methods: [markCredentialTyped]
+    allowed: [internal/gateway/secrets.go]
+    fix: mark the trigger only in internal/gateway/secrets.go

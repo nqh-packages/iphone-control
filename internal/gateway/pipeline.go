@@ -472,8 +472,8 @@ func personAllowed(v policy.Verdict) bool {
 	return v.Decision == policy.Ask || len(v.Exempted) > 0
 }
 
-// act is the pipeline for one action on a lease that is already acquired.
-func (g *Gateway) act(ctx context.Context, l *lease, c Call, a Action) *Result {
+// actCore is the pipeline for one action on a lease that is already acquired.
+func (g *Gateway) actCore(ctx context.Context, l *lease, c Call, a Action) *Result {
 	g.autoUnlock(ctx, l)
 	if res := g.gate(l, c.ApprovalID, true); res != nil {
 		return res
@@ -2410,6 +2410,7 @@ func (g *Gateway) observeOCR(ctx context.Context, d *device, mode readOCR) (*scr
 		// Toasts and dialogs on a blocked app's screen are the app's own.
 		evs = notificationsOnly(evs)
 	}
+	d.dialogUp = hasDialogEvent(evs)
 	d.events = append(d.events, evs...)
 	if n := len(d.events); n > 50 {
 		d.events = append([]screen.Event(nil), d.events[n-50:]...)

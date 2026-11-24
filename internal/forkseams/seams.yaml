@@ -80,3 +80,17 @@ seams:
     allowed:
       - internal/gateway/secrets.go
     fix: "a shown code leaves the slot only in internal/gateway/secrets.go (secretText), just before the driver types it, like a staged secret. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: interrupt book user files
+    package: github.com/DIYgod/pinky/internal/interrupt
+    symbols:
+      - UserFiles
+    allowed:
+      - cmd/pinky/interrupts.go
+    fix: "the user's interrupt entries are read from $PINKY_HOME/interrupts.d only at daemon start, in cmd/pinky/interrupts.go, which hands the loaded book to gateway.Options.Interrupts. If another file really needs them, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: credential trigger writer
+    package: github.com/DIYgod/pinky/internal/gateway
+    methods:
+      - markCredentialTyped
+    allowed:
+      - internal/gateway/secrets.go
+    fix: "the credential_typed trigger that lets a consent entry fire is set only where a staged secret is handed to the driver, internal/gateway/secrets.go (secretText). If another file really needs to set it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."

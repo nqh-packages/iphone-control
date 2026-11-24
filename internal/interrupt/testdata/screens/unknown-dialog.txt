@@ -1,0 +1,5 @@
+screen 400x800 · app: Settings (com.apple.Preferences) · portrait · keyboard hidden
+dialog: "Turn On iCloud Keychain?"
+[1] text "Turn On iCloud Keychain?" @200,300
+[2] button "Not Now" @200,420
+[3] button "Turn On" @200,480

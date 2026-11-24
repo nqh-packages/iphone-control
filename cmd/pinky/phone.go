@@ -77,7 +77,8 @@ func phoneUsage(w io.Writer) {
   pinkyctl phone status [-device D] [-as NAME]
   pinkyctl phone tools [--json] [name]
   pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
-  pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
+  pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] [-expect NAME] (<file> | -e '<sh>' | -)
+  pinkyctl phone interrupts (check <file> | match <file> <screen.txt> [-expect NAME] [-typed])
   pinkyctl phone pin (set | check | delete) [-device D]
   pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
   pinkyctl phone login (set | check | delete) -name NAME
@@ -95,6 +96,11 @@ pin saves the passcode the daemon enters when a call finds the phone locked
 
 fill types a saved login's password into a field through the credential broker;
 run pinkyctl phone fill -h.
+
+-expect NAME on run declares what the script starts (sign-in, store): the
+interrupt entries that need it, such as allowing the sign-in request the
+script's own login triggers, fire only then. interrupts match tells which
+entry fires on a saved screen; run pinkyctl phone interrupts help.
 
 secret put stages a secret from the credential broker for one app, for
 phone_type's {{secret:NAME}}; run pinkyctl phone secret help.
@@ -132,6 +138,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneFillCmd(args[1:], pio)
 	case "secret":
 		return phoneSecretCmd(args[1:], pio)
+	case "interrupts":
+		return phoneInterruptsCmd(args[1:], pio)
 	case "help", "-h", "--help", "-help":
 		phoneUsage(pio.out)
 		return phoneExitOK
@@ -441,6 +449,7 @@ type phoneRun struct {
 	cs       *sdk.ClientSession
 	task     string
 	device   string
+	expect   []string
 	deadline time.Time // the end of -wait
 	imageDir string
 
@@ -558,6 +567,9 @@ func (r *phoneRun) ensureConnected(ctx context.Context) (phoneReply, bool) {
 	defer r.mu.Unlock()
 	for !r.connected {
 		args := map[string]any{"task": r.task}
+		if len(r.expect) > 0 {
+			args["expect"] = r.expect
+		}
 		if r.device != "" {
 			args["device"] = r.device
 		}
@@ -798,6 +810,7 @@ func phoneRunCmd(args []string, pio phoneIO) int {
 	wait := fs.Float64("wait", 60, "seconds to queue for the phone")
 	task := fs.String("task", "", "the task title shown in Pinky")
 	device := fs.String("device", "", "the phone, by id or name")
+	expect := expectFlag(fs)
 	eText := fs.String("e", "", "shell text to run")
 	if code, ok := phoneParse(fs, args); !ok {
 		return code
@@ -815,6 +828,7 @@ func phoneRunCmd(args []string, pio phoneIO) int {
 		*task = fmt.Sprintf("%s · %d", name, os.Getpid())
 	}
 	r := newPhoneRun(cs, *task, *device, time.Duration(*wait*float64(time.Second)))
+	r.expect = *expect
 
 	dir, err := os.MkdirTemp("", "pp-")
 	if err != nil {

@@ -73,11 +73,12 @@ type connectIn struct {
 	Task   string   `json:"task" jsonschema:"One line naming the task, shown to the person, e.g. Reorder last week's lunch."`
 	Apps   []string `json:"apps,omitempty" jsonschema:"Optional: the only apps this task needs, by name or id, as a list of strings: [\"Settings\", \"com.apple.mobilecal\"]. Pinky then refuses to launch other apps and asks the person before typing into them."`
 	// ReadOnly lets an agent ask for less than the person gave it.
-	ReadOnly   bool   `json:"read_only,omitempty" jsonschema:"Run this task read-only, for tasks that only look: you may open apps, read and search, but anything the person's rules would ask about is refused, and typing works only in search fields. A new agent's approval card then offers read-only access."`
-	OwnScreen  bool   `json:"own_screen,omitempty" jsonschema:"Work on the phone's own screen even when the person has Pinky work on a background display, which has no home screen. Only for work on the home screen itself: moving app icons, making folders, widgets. If the person used the phone in the last minute, the task starts paused until they hand it over; if it is locked, they unlock it."`
-	Connection string `json:"connection,omitempty" jsonschema:"iPhone only: how Pinky connects to the phone for this task. auto (default): Pinky chooses, and moves the task to Pinky on the iPhone when phone_launch opens an app known to refuse screen sharing (DBS digibank, China Merchants Bank), once the launch may run. helper: Pinky on the iPhone (WebDriverAgent), which shares no screen, for apps that refuse screen sharing; slower. coredevice: back to the faster CoreDevice. The phone returns to the person's choice after the task; a connection the person fixed in Settings is kept, and nothing moves while the person is in control, the phone is locked or an approval is open."`
-	ApprovalID string `json:"approval_id,omitempty" jsonschema:"From an approval_pending result: repeat the same call with the same arguments and this id to keep waiting for the person's answer."`
-	WaitMS     int    `json:"wait_ms,omitempty" jsonschema:"Wait for the phone instead of returning lease_held at once: first come first served, up to this many ms (at most 600000). One call waits up to about 30 s, then returns lease_held with your place in line; call phone_connect again within 5 s to keep it."`
+	ReadOnly   bool     `json:"read_only,omitempty" jsonschema:"Run this task read-only, for tasks that only look: you may open apps, read and search, but anything the person's rules would ask about is refused, and typing works only in search fields. A new agent's approval card then offers read-only access."`
+	OwnScreen  bool     `json:"own_screen,omitempty" jsonschema:"Work on the phone's own screen even when the person has Pinky work on a background display, which has no home screen. Only for work on the home screen itself: moving app icons, making folders, widgets. If the person used the phone in the last minute, the task starts paused until they hand it over; if it is locked, they unlock it."`
+	Connection string   `json:"connection,omitempty" jsonschema:"iPhone only: how Pinky connects to the phone for this task. auto (default): Pinky chooses, and moves the task to Pinky on the iPhone when phone_launch opens an app known to refuse screen sharing (DBS digibank, China Merchants Bank), once the launch may run. helper: Pinky on the iPhone (WebDriverAgent), which shares no screen, for apps that refuse screen sharing; slower. coredevice: back to the faster CoreDevice. The phone returns to the person's choice after the task; a connection the person fixed in Settings is kept, and nothing moves while the person is in control, the phone is locked or an approval is open."`
+	ApprovalID string   `json:"approval_id,omitempty" jsonschema:"From an approval_pending result: repeat the same call with the same arguments and this id to keep waiting for the person's answer."`
+	Expect     []string `json:"expect,omitempty" jsonschema:"What this task starts, such as [\"sign-in\"]: the phone's own prompts that only that task may answer (allowing the sign-in request your login triggers) are cleared by Pinky only for a task that said so, and only after it typed a credential. Names: sign-in, store."`
+	WaitMS     int      `json:"wait_ms,omitempty" jsonschema:"Wait for the phone instead of returning lease_held at once: first come first served, up to this many ms (at most 600000). One call waits up to about 30 s, then returns lease_held with your place in line; call phone_connect again within 5 s to keep it."`
 }
 
 type releaseIn struct {
@@ -434,7 +435,7 @@ func (s *Server) addTools(srv *sdk.Server, remote bool) {
 		func(ctx context.Context, req *sdk.CallToolRequest, in connectIn) (*sdk.CallToolResult, any, error) {
 			return render(s.session(req, remote).Connect(ctx, gateway.ConnectRequest{
 				Call: gateway.Call{Device: strings.TrimSpace(in.Device), ApprovalID: strings.TrimSpace(in.ApprovalID), Progress: progress(ctx, req)},
-				Task: in.Task, Apps: in.Apps, ReadOnly: in.ReadOnly, OwnScreen: in.OwnScreen, Connection: in.Connection,
+				Task: in.Task, Apps: in.Apps, ReadOnly: in.ReadOnly, OwnScreen: in.OwnScreen, Connection: in.Connection, Expect: in.Expect,
 				Wait: time.Duration(in.WaitMS) * time.Millisecond})), nil, nil
 		})
 

@@ -1,0 +1,37 @@
+entries:
+  - name: sign-in-request
+    kind: consent
+    expect: sign-in
+    after: credential_typed
+    max: 1
+    when:
+      texts: ["Sign In Requested"]
+      button: "Allow"
+    do:
+      - tap: "Allow"
+
+  - name: code-shown-done
+    kind: dismiss
+    when:
+      shape: code_shown
+      button: "Done"
+    do:
+      - tap: "Done"
+
+  - name: code-shown-ok
+    kind: dismiss
+    when:
+      shape: code_shown
+      button: "OK"
+    do:
+      - tap: "OK"
+
+  - name: code-boxes
+    kind: credential
+    expect: sign-in
+    max: 1
+    when:
+      shape: code_field
+    rejected: ["Incorrect verification code"]
+    do:
+      - type_code: true

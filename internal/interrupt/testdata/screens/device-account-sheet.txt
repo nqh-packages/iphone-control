@@ -1,0 +1,5 @@
+screen 400x800 · app: Safari (com.apple.mobilesafari) · portrait · keyboard hidden
+ocr "Sign in to account.apple.com with your Apple Account?" @200,520
+ocr "Continue as Someone" @200,600
+ocr "Use a different Apple Account" @200,660
+ocr "Cancel" @200,720
