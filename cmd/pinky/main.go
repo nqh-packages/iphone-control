@@ -103,6 +103,8 @@ func dispatch(cmd string, args []string) error {
 		return runDevices(args)
 	case "task":
 		return runTask(args)
+	case "phone":
+		return runPhone(args)
 	case "companion":
 		return runCompanion(args)
 	case "helper":
@@ -163,6 +165,10 @@ Commands:
   task run|status|steer|cancel|list
             hand Ask Pinky a task from a shell and follow it, as an agent
             named "Pinky CLI" or -as name ("pinkyctl task help")
+  phone status|tools|call|run
+            drive the phone from a shell through its phone_* tools: one
+            JSON status line, the live tool list, one call, or a script
+            with one session and one lease ("pinkyctl phone help")
   companion install [phone]
             install or update Pinky on the phone, Pinky's app for Android phones
   helper install [--team ID] [--bundle-id ID] [--local-signing]
