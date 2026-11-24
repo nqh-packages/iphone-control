@@ -64,6 +64,7 @@ func (g *Gateway) Devices() []DeviceView {
 			v.TaskID = d.lease.task.id
 		}
 		v.LeaseGen, v.LeaseEnded = d.leaseGen, d.leaseEnded
+		v.Lease = g.leaseViewLocked(d)
 		out = append(out, v)
 	}
 	return out

@@ -68,6 +68,10 @@ type Options struct {
 	// knows: every other phone a provider lists is dropped before it is
 	// opened, shown or leased.
 	AllowDevices []string
+	// LeaseReserve keeps a phone for the agent that released it, by name, so
+	// that agent's next phone_connect comes first: others get lease_held, or
+	// wait. Zero (the default) keeps none.
+	LeaseReserve time.Duration
 	// DefaultScope is what a newly approved agent may do; default everything.
 	DefaultScope Scope
 	// PIN returns a phone's saved PIN when the person asks to unlock it

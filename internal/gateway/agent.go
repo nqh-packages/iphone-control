@@ -139,6 +139,8 @@ type Result struct {
 	// unread: the action went out and its screen was left unread, as
 	// Call.unread asks.
 	unread bool
+	// queued: a lease_held that put the session in line (turnLocked).
+	queued bool
 }
 
 // IsError reports whether the result is an error rather than a status.
@@ -198,6 +200,10 @@ type ConnectRequest struct {
 	// helper, which shares no screen), "coredevice", or "auto"/"" for
 	// Pinky's choice (taskconn.go).
 	Connection string
+	// Wait queues for the phone, first come first served, instead of returning
+	// lease_held at once: the call waits while it may, then returns lease_held
+	// with the session's place in line; calling again within ticketGrace keeps it.
+	Wait time.Duration
 }
 
 // ReleaseRequest is phone_release.
@@ -577,9 +583,9 @@ func (g *Gateway) deviceListLocked() string {
 	return strings.Join(out, ", ")
 }
 
-// Connect implements phone_connect: it leases a device for a task and
-// returns the first screen.
-func (s *Session) Connect(ctx context.Context, req ConnectRequest) *Result {
+// connect is phone_connect without the line: it leases a device for a task
+// and returns the first screen.
+func (s *Session) connect(ctx context.Context, req ConnectRequest) *Result {
 	g := s.g
 	ctx = g.withBudget(ctx) // the agent's approval and the first read share it
 	title := strings.TrimSpace(req.Task)

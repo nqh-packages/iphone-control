@@ -78,6 +78,8 @@ type DeviceView struct {
 	// has).
 	LeaseGen   uint64
 	LeaseEnded time.Time
+	// Lease says who holds the phone, who it is kept for and who waits.
+	Lease LeaseView
 	// Features says what the phone's driver offers, so the client shows
 	// only the controls that work. All false while the phone is offline.
 	Features Features

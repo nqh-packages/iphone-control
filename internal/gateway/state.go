@@ -61,6 +61,7 @@ type device struct {
 	// that moved the phone tells the agent the real reason (taskconn.go).
 	openErr error
 	lease   *lease
+	line    line // the queue for its lease (queue.go)
 	// leaseGen counts leases started and ended on the device, and
 	// leaseEnded is when the last one ended: the approvals page refuses an
 	// answer from this phone's browser across any lease (webapproval).
