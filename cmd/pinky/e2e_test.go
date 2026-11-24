@@ -151,6 +151,12 @@ func TestEndToEnd(t *testing.T) {
 	bin := buildPinky(t)
 	home := pinkyHome(t)
 	d := dirsFor(t, home)
+	if err := os.MkdirAll(d.Config, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(d.Rules(), []byte("preset: 2\nguards:\n  payments: ask\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 
 	daemon := exec.Command(bin, "daemon", "--fake")
 	daemon.Env = env(home)
