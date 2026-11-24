@@ -51,6 +51,11 @@ type wdaClient struct {
 	// returned func after it: it counts the phone as used (rest_wda.go).
 	enter func() func()
 
+	dialer atomic.Pointer[wdaDialFunc]
+	other  func(ctx context.Context) (wdaDialFunc, bool)
+	fails  int
+	swaps  int
+
 	mu    sync.Mutex
 	sid   string // the WebDriver session
 	depth int    // snapshotMaxDepth as last set in the session; 0 none yet
@@ -71,9 +76,9 @@ func (e *wdaDialError) Unwrap() error { return e.err }
 // newWDAUSB returns a client that reaches WDA on the phone behind a usbmuxd
 // entry.
 func newWDAUSB(e goios.DeviceEntry) *wdaClient {
-	return newWDADial(func(ctx context.Context, port int) (net.Conn, error) {
-		return dialDevicePort(ctx, e.DeviceID, port)
-	})
+	c := newWDADial(usbmuxDial(e))
+	c.other = func(ctx context.Context) (wdaDialFunc, bool) { return otherTransport(e) }
+	return c
 }
 
 // newWDATunnel returns a client that reaches WDA on the phone through a
@@ -90,30 +95,30 @@ func newWDATunnel(t *Tunnel) *wdaClient {
 
 // newWDADial returns a client that opens its connections to the phone's
 // ports with dial.
-func newWDADial(dial func(ctx context.Context, port int) (net.Conn, error)) *wdaClient {
+func newWDADial(dial wdaDialFunc) *wdaClient {
+	c := &wdaClient{}
+	c.dialer.Store(&dial)
 	tr := &http.Transport{
 		DialContext: func(ctx context.Context, _, addr string) (net.Conn, error) {
 			port := wdaPort
 			if strings.HasPrefix(addr, "mjpeg:") {
 				port = mjpegPort
 			}
-			c, err := dial(ctx, port)
+			conn, err := (*c.dialer.Load())(ctx, port)
 			if err != nil && ctx.Err() == nil {
 				return nil, &wdaDialError{err}
 			}
-			return c, err
+			return conn, err
 		},
 		MaxIdleConns:        4,
 		IdleConnTimeout:     30 * time.Second,
 		DisableCompression:  true,
 		TLSHandshakeTimeout: time.Second,
 	}
-	return &wdaClient{
-		base:  "http://wda",
-		mjpeg: "http://mjpeg/",
-		hc:    &http.Client{Transport: tr, Timeout: 30 * time.Second},
-		long:  &http.Client{Transport: tr},
-	}
+	c.base, c.mjpeg = "http://wda", "http://mjpeg/"
+	c.hc = &http.Client{Transport: tr, Timeout: 30 * time.Second}
+	c.long = &http.Client{Transport: tr}
+	return c
 }
 
 // newWDAURL returns a client for a WDA server at a URL, such as one running
@@ -363,6 +368,7 @@ func (c *wdaClient) session(ctx context.Context) (string, error) {
 	c.sid = out.SessionID
 	c.depth = 0
 	if err := c.call(ctx, c.hc, http.MethodPost, "/session/"+c.sid+"/appium/settings", map[string]any{"settings": wdaSettings}, nil); err != nil {
+		c.sid = ""
 		return "", err
 	}
 	c.depth = wdaDepth
@@ -399,20 +405,35 @@ func (c *wdaClient) setDepth(ctx context.Context, depth int) error {
 // do runs a session request, starting a new session once when WDA lost its
 // own (it restarted).
 func (c *wdaClient) do(ctx context.Context, hc *http.Client, method, path string, body, out any) error {
-	for attempt := 0; ; attempt++ {
+	renewed, recovered := false, false
+	for {
 		sid, err := c.session(ctx)
-		if err != nil {
+		sent := err == nil
+		if sent {
+			err = c.call(ctx, hc, method, "/session/"+sid+path, body, out)
+		}
+		if err == nil {
+			c.dialed()
+			return nil
+		}
+		if sent && !renewed && isSessionError(err) {
+			renewed = true
+			c.mu.Lock()
+			if c.sid == sid {
+				c.sid = ""
+			}
+			c.mu.Unlock()
+			continue
+		}
+		var de *wdaDialError
+		if !errors.As(err, &de) {
 			return err
 		}
-		err = c.call(ctx, hc, method, "/session/"+sid+path, body, out)
-		if err == nil || attempt > 0 || !isSessionError(err) {
-			return err
+		if recovered || (sent && isInput(method, "/session/"+sid+path)) {
+			return c.dialFailed(err, recovered)
 		}
-		c.mu.Lock()
-		if c.sid == sid {
-			c.sid = ""
-		}
-		c.mu.Unlock()
+		recovered = true
+		c.recoverDial(ctx)
 	}
 }
 

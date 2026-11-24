@@ -854,3 +854,7 @@ Every call answers within 45 s of reaching Pinky, however slowly the phone answe
 An approval's own timeout and `phone_handoff` keep their times: those calls return `approval_pending` and are repeated.
 
 After an action, a screen whose text OCR read while its accessibility tree has little (a web page shown before its links and buttons are in the tree) is read again until the tree has it, for up to 4 s and within the call's time. An app whose tree stays that way for the whole wait (a game, a canvas) is not waited for again until another app shows such a screen.
+
+## When the helper stops listening
+
+If a read hits "Failed connecting to service" on the phone's helper port, the tool drops the stale helper session and retries the read once. When the same connection has failed twice in a row, the next recovery uses the phone's other connection (USB or Wi-Fi) once. An action is never retried after a dial error: it comes back `uncertain` with the error and a `fix:` line naming the recovery that was or was not tried, and a fresh read shows what the screen is.
