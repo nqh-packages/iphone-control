@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -41,7 +42,7 @@ type phoneEnv struct {
 	dev *demo.Device
 }
 
-func newPhoneEnv(t *testing.T) *phoneEnv {
+func newPhoneEnv(t *testing.T, opts ...func(*gateway.Options)) *phoneEnv {
 	t.Helper()
 	home := pinkyHome(t)
 	t.Setenv(api.HomeEnv, home)
@@ -60,9 +61,13 @@ func newPhoneEnv(t *testing.T) *phoneEnv {
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}
-	g, err := gateway.New(gateway.Options{Providers: []driver.Provider{demo.NewProvider(driver.IOS, dev)}, Policy: pol,
+	o := gateway.Options{Providers: []driver.Provider{demo.NewProvider(driver.IOS, dev)}, Policy: pol,
 		TrustNewAgents: true, SettleMax: 200 * time.Millisecond, PollInterval: 5 * time.Millisecond,
-		MaxBlock: 2 * time.Second, DiscoverEvery: 20 * time.Millisecond, LeaseReserve: 3 * time.Second})
+		MaxBlock: 2 * time.Second, DiscoverEvery: 20 * time.Millisecond}
+	for _, f := range opts {
+		f(&o)
+	}
+	g, err := gateway.New(o)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -194,5 +199,89 @@ func TestPhoneForwardsUnknownTool(t *testing.T) {
 	code, out, errOut = phone("tools", "--json", "probe")
 	if code != phoneExitOK || !strings.Contains(out, `"name": "phone_probe"`) || !strings.Contains(out, `"inputSchema"`) {
 		t.Fatalf("tools --json probe: %d\n%s\n%s", code, out, errOut)
+	}
+	code, out, errOut = phone("call", "probe", "x=1")
+	if code != phoneExitOK || strings.TrimSpace(out) != "settled · probe got x=1" {
+		t.Fatalf("call probe: %d\n%s\n%s", code, out, errOut)
+	}
+}
+
+func TestPhoneExitCodes(t *testing.T) {
+	env := newPhoneEnv(t)
+	cases := []struct {
+		name string
+		do   func() (int, string)
+		want int
+	}{
+		{"settled", func() (int, string) { c, o, e := phone("call", "observe"); return c, o + e }, phoneExitOK},
+		{"tool error", func() (int, string) { c, o, e := phone("call", "tap"); return c, o + e }, phoneExitToolError},
+		{"usage", func() (int, string) { c, o, e := phone("call", "-nosuchflag", "observe"); return c, o + e }, phoneExitUsage},
+		{"unknown tool", func() (int, string) { c, o, e := phone("call", "nosuchtool"); return c, o + e }, phoneExitUsage},
+	}
+	for _, c := range cases {
+		if got, out := c.do(); got != c.want {
+			t.Errorf("%s: exit %d, want %d\n%s", c.name, got, c.want, out)
+		}
+	}
+	if _, _, errOut := phone("call", "nosuchtool"); !strings.Contains(errOut, "\nfix: ") {
+		t.Errorf("an unknown tool's error has no fix line: %q", errOut)
+	}
+
+	if err := env.g.TakeOver("se"); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut := phone("call", "observe")
+	if code != phoneExitPerson || !strings.HasPrefix(out, "paused") {
+		t.Errorf("takeover: exit %d\n%s%s", code, out, errOut)
+	}
+	if err := env.g.HandBack("se", ""); err != nil {
+		t.Fatal(err)
+	}
+
+	env.hold(t, "other", "hold")
+	start := time.Now()
+	code, out, errOut = phone("call", "-wait", "1", "observe")
+	if code != phoneExitBusy || !strings.HasPrefix(out, "error: lease_held") || time.Since(start) < 900*time.Millisecond {
+		t.Errorf("busy: exit %d after %v\n%s%s", code, time.Since(start), out, errOut)
+	}
+}
+
+func TestPhoneExitNoGateway(t *testing.T) {
+	home := pinkyHome(t)
+	t.Setenv(api.HomeEnv, home)
+	code, out, errOut := phone("call", "observe")
+	if code != phoneExitNoGateway || out != "" || !strings.Contains(errOut, "\nfix: ") {
+		t.Fatalf("no gateway: exit %d\n%s%s", code, out, errOut)
+	}
+	if code, _, _ := phone("status"); code != phoneExitNoGateway {
+		t.Fatalf("status without a gateway: exit %d", code)
+	}
+}
+
+func TestPhoneImageToFile(t *testing.T) {
+	newPhoneEnv(t)
+	t.Setenv("TMPDIR", t.TempDir())
+	code, out, errOut := phone("call", "observe", "screenshot=true")
+	if code != phoneExitOK {
+		t.Fatalf("observe: %d\n%s%s", code, out, errOut)
+	}
+	var path string
+	var size int
+	for _, l := range strings.Split(out, "\n") {
+		if rest, ok := strings.CutPrefix(l, "image: "); ok {
+			p, n, _ := strings.Cut(rest, " · ")
+			path = p
+			size, _ = strconv.Atoi(n)
+		}
+	}
+	if path == "" || !strings.HasPrefix(path, os.Getenv("TMPDIR")) || !strings.HasSuffix(path, ".jpg") {
+		t.Fatalf("no image line under $TMPDIR:\n%s", out)
+	}
+	b, err := os.ReadFile(path)
+	if err != nil || len(b) != size || !bytes.HasPrefix(b, []byte{0xff, 0xd8}) {
+		t.Fatalf("image file: %v, %d bytes of %d, starts % x", err, len(b), size, b[:min(len(b), 4)])
+	}
+	if len(out) > 4000 {
+		t.Fatalf("stdout is %d bytes: the picture must not be inline", len(out))
 	}
 }
