@@ -25,3 +25,16 @@ Synthesis of two independent designs (`extras-design-opus.md`, `extras-design-ge
 ## Build order
 
 Slice 1, unlock: steps 5, 6, 7, 8 (unlock part), 9 (unlock docs), then device steps 10 and 11. Slice 2, credentials: steps 1 to 4, 8 (vault part), 9, then device step 12.
+
+## Slice 1 (unlock) as built
+
+Where the build differs from `extras-design-opus.md`, 2026-11-24:
+
+- `secret.AgentPINs` takes a `PINStore` (`NewAgentPINsOn`, with `MemoryPINStore` for tests); `State` returns an error; the outcome callback is split into `Refused` and `Entered`, because `secret` must not import `driver` (the mapping is `pinOutcome` in `cmd/pinky/autounlock.go`). A handout starts the one-minute wait, and `Entered` clears it; `Unlock` also reports `nil` when it finds the phone already unlocked, so that wait is not left behind.
+- A refusal is kept in the keychain and in memory, so a store that cannot take the marker still holds it for the run.
+- `secret.PINFix` words the fix line of each error once, for the CLI and for the agent's note.
+- `pin set` also takes `-file`, which is zeroed and deleted after reading, valid or not.
+- An agent that may only watch never triggers an unlock (the design was silent).
+- Per-device turn in `autoUnlock`, so overlapping calls enter the one PIN once.
+- `internal/forkseams` guards `secret.NewAgentPINs` and `NewAgentPINsOn`; the seam is declared in `seams.yaml`, and `CLAUDE.md` (`AGENTS.md`) says how to extend it.
+- Unproven until device steps 10 and 11: that the keychain's no-prompt flag alone stops the legacy access-list prompt in the daemon, the status codes of a locked keychain and of a denied read, and `unlockEstimate`.

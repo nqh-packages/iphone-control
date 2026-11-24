@@ -152,7 +152,7 @@ note: "<the person's note>"
 | `user_took_over` | The person took over; returned at once with the current screen. Later calls return `paused` until they hand back |
 | `paused` | The person is in control. Wait with `phone_handoff` |
 | `stopped` | The person pressed Stop; the lease is gone, and this session may not use that phone again |
-| `device_locked` | The phone is locked. Call `phone_handoff` |
+| `device_locked` | The phone is locked. Call `phone_handoff`; with [autonomous unlock](#autonomous-unlock) the message also says why Pinky did not unlock it, ending in a `fix:` line |
 | `device_needs_setup` | The phone is connected, but Pinky cannot use it until the person does a step on it or on the computer, and nothing was done. `setup` names the step and the message says what to do: on an iPhone `trust`, `trust_record` (the iPhone trusts this computer, but Apple's device service could not replace the pairing record it holds on Windows: the message has the command an administrator runs; see [docs/notes/ios.md](notes/ios.md)), `developer_mode`, `unlock`, `passcode` (iOS asks for it before Pinky on the iPhone (WebDriverAgent) may control the phone), `no_disk_image`, `disk_image`, `install_helper`, `connection` (the connection chosen in Settings › Phones does not work with the phone: the person chooses another), `unlock` (also an iPhone or iPad locked on Wi-Fi, which Pinky opens only once it is unlocked), `device_service` (the Mac's device service lost the phone on Wi-Fi: only a person at the computer can bring it back, by clicking Restart device service in Pinky and entering the computer's administrator password; Pinky shows them a card in Needs you and a notification. An agent nobody watches, such as a scheduled run, should not wait for it: release the phone and use another, or end the task. A handoff for it that returns `approval_pending` says so again), `media_in_use` (an app on the iPhone uses the camera or microphone, a call for one, and iOS 27 does not let Pinky show the screen then: the person ends the call or closes that app, and Pinky connects by itself); on Android `authorize` (allow USB debugging), `usb_permission`, `usb_driver`; `preparing` (Pinky prepares the phone: wait a few seconds, then observe) and `update` (the phone's iOS is too old: end the task) are no steps to hand off. Otherwise call `phone_handoff` asking for the step: it ends by itself once the phone is ready, with the whole screen. After `usb_driver` the phone comes back under another id: call `phone_connect` again. The lease waits with the phone instead of ending after 60 s |
 
 ### Errors
@@ -682,6 +682,7 @@ pinkyctl phone status [-device D] [-as NAME]
 pinkyctl phone tools [--json] [name]
 pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
 pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
+pinkyctl phone pin (set | check | delete) [-device D]
 ```
 
 `status` prints one JSON line and takes no lease: `{"free":true,"device":"iPhone SE","holder":null,"task":null,"reserved_for":null,"reserved_left_s":0,"waiting":0,"link":"usb","health":"idle"}`. `free` is false while someone holds the phone, waits in line, or the person has it; a phone kept for a name after its `phone_release` is free for that name only (`-as`). `health` is the phone's status as `pinkyctl devices --json` gives it.
@@ -708,6 +709,27 @@ The tool's text goes to stdout unchanged. A screenshot is never printed: it is w
 | 5 | the person has the phone or must act: `user_took_over`, `paused`, `stopped`, `device_locked`, `device_needs_setup`, `error: device_paused` |
 
 `run` returns the script's own status, or 128 plus the signal after SIGINT or SIGTERM. The status line's keys are pinned by `cmd/pinky/testdata/phone-status.golden.json`.
+
+### Autonomous unlock
+
+With `PINKY_AUTO_UNLOCK=1` in the daemon's environment, a call that finds the phone locked unlocks it first with the passcode the owner saved, with nobody confirming. It happens at the start of `phone_connect`, `phone_observe`, `phone_read_list`, a hand-back and every action, and nowhere else. It is off by default, and in the desktop app, which keeps asking for Touch ID, and with fake phones.
+
+The owner saves the passcode once per phone, from a terminal (no echo) or a delivered file:
+
+```sh
+pinkyctl phone pin set -device <id> [-file PATH]   # one line on stdin, or the file, which is zeroed and deleted after reading
+pinkyctl phone pin check [-device D]               # {"device":"<id>","saved":true,"refused":false}; never reads the passcode
+pinkyctl phone pin delete [-device D]
+```
+
+There is no way to show the passcode, and the CLI never takes it as an argument. `-device` must be an id the gateway lists (`PINKY_ALLOW_DEVICES` when no daemon runs); with one phone it can be left out. The passcode lives in the login keychain under its own service (`app.pinky.agent`), which only this build of `pinky` reads, and reading never shows a prompt.
+
+- **One wrong try, ever.** Once the phone refuses the saved passcode, Pinky never enters it again, across restarts, until `pinkyctl phone pin set` runs again. A passcode that was handed out but never entered (the passcode screen was not reached) waits a minute before the next try.
+- **A person's phone is left alone.** While the person has taken over, or touched the phone in the last minute, nothing is entered. An agent that may only watch never unlocks.
+- **No saved passcode** answers `device_locked` at once. The same goes for a locked login keychain and for a build of `pinky` the keychain does not trust: each message says which, and ends with a `fix:` line (`pinkyctl phone pin set -device <id>`, unlock the keychain). A call with too little of its 45 s left does not try; the next call does.
+- The passcode never reaches a log, a history step, a recording, an event or an error: Pinky logs only `auto unlock` with `ok` and a fixed reason code, and the step reads "Unlocked from the computer".
+
+With it on, the Unlock button in the app's client (the control socket's `unlock`) also enters the saved passcode without Touch ID, as it is the same path.
 
 ## Saving screenshots and reports
 
