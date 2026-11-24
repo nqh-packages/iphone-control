@@ -23,6 +23,7 @@ import (
 	"github.com/DIYgod/pinky/internal/secret"
 	"github.com/DIYgod/pinky/internal/tailnet"
 	"github.com/DIYgod/pinky/internal/traffic"
+	"github.com/DIYgod/pinky/internal/vault"
 )
 
 // Options configure a Gateway. Zero durations take the defaults in
@@ -88,6 +89,9 @@ type Options struct {
 	// other), so the PIN's owner can stop handing out a refused PIN. Nil:
 	// nobody listens.
 	PINOutcome func(deviceID string, err error)
+	// Secrets resolves {{secret:NAME}} in phone_type, from values the
+	// owner's credential broker staged. Nil refuses every reference.
+	Secrets *vault.Vault
 
 	// Pinky's traffic capture (capture.go). TrafficPort is the proxy's
 	// port, default TrafficPort; TrafficSetupPort the port of its setup

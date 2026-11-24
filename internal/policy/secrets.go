@@ -25,11 +25,11 @@ func (e *Engine) secretAppLocked(appID string) bool {
 func (e *Engine) secretVerdictLocked(in Input, kinds []Kind) (Verdict, bool) {
 	if in.Op != OpType || !IsCredentialField(in.Target) {
 		return Verdict{Decision: Deny, Rule: RuleCredentials, Kinds: kinds,
-			Reason: "A secret goes only into a password or one-time-code field; this is not one. Nothing was done. fix: pass the ref of the password or code field."}, true
+			Reason: "A secret goes only into a password or one-time-code field; this is not one. fix: pass the ref of the password or code field."}, true
 	}
 	if !e.secretAppLocked(in.App.ID) {
 		return Verdict{Decision: Deny, Rule: RuleCredentials, Kinds: kinds,
-			Reason: fmt.Sprintf("%s is not on the owner's credential_apps list, so Pinky types no secret there. Nothing was done. fix: ask the owner to add %s to credential_apps in rules.yaml, or call phone_handoff.",
+			Reason: fmt.Sprintf("%s is not on the owner's credential_apps list, so Pinky types no secret there. fix: ask the owner to add %s to credential_apps in rules.yaml, or call phone_handoff.",
 				appName(in.App), idOrName(in.App))}, true
 	}
 	return Verdict{}, false

@@ -691,3 +691,34 @@ func TestConnectWait(t *testing.T) {
 		t.Fatal("the waiting phone_connect was not answered after the release")
 	}
 }
+
+// TestCredentialReference: agents learn the {{secret:NAME}} convention from
+// phone_type's schema, and a literal password is refused all the same, also
+// with the reference's wording in it.
+func TestCredentialReference(t *testing.T) {
+	h := newHarness(t)
+	c := h.connect(t, "claude-code")
+	res, err := c.cs.ListTools(context.Background(), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tool := range res.Tools {
+		if tool.Name != "phone_type" {
+			continue
+		}
+		schema, _ := json.Marshal(tool.InputSchema)
+		if !strings.Contains(string(schema), "{{secret:NAME}}") {
+			t.Fatalf("phone_type does not teach the reference: %s", schema)
+		}
+	}
+	c.call(t, "phone_connect", map[string]any{"task": "Sign in"})
+	h.dev.Show("account")
+	text, _ := c.call(t, "phone_observe", nil)
+	for _, typed := range []string{"hunter2", "{{secret:hunter2}}"} {
+		text, _ = c.call(t, "phone_type", map[string]any{"ref": refOf(t, text, "Password"), "text": typed})
+		if !strings.HasPrefix(text, "blocked_by_policy") || !strings.Contains(text, "rule: credentials") {
+			t.Fatalf("%q:\n%s", typed, text)
+		}
+		text, _ = c.call(t, "phone_observe", nil)
+	}
+}

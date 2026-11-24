@@ -940,6 +940,9 @@ func (g *Gateway) prepare(ctx context.Context, l *lease, a Action, cur *screen.S
 			return p, &Result{Status: StatusBlocked, Rule: policy.RuleCredentials,
 				Message: "This screen has a password or code field and Pinky cannot tell which field has focus. Nothing was done. Pass ref to type into a specific field, or call phone_handoff for credentials."}
 		}
+		if res := g.secretReady(a, p); res != nil {
+			return p, res
+		}
 	case "swipe":
 		p.input.Op = policy.OpSwipe
 		p.dur = 300 * time.Millisecond
@@ -2145,7 +2148,11 @@ func (g *Gateway) perform(ctx context.Context, dev driver.Device, a Action, p *p
 				return ctx.Err()
 			}
 		}
-		return dev.Type(ctx, a.Text, driver.TypeOptions{Append: a.Append, Submit: a.Submit})
+		text, err := g.secretText(a, p)
+		if err != nil {
+			return err
+		}
+		return scrubSecret(dev.Type(ctx, text, driver.TypeOptions{Append: a.Append, Submit: a.Submit}), a, text)
 	case "swipe":
 		return dev.Swipe(ctx, p.from, p.to, p.dur)
 	case "pinch":
@@ -2371,6 +2378,7 @@ func (g *Gateway) observeOCR(ctx context.Context, d *device, mode readOCR) (*scr
 	// One-time codes are masked before anything else sees the read: the
 	// agent, history, approvals and refs (policy.MaskScreen).
 	g.policy.MaskScreen(s)
+	g.maskSecrets(s)
 	// So are blocked apps' notifications and cards on other screens
 	// (hidden.go); their notification events are matched by name too.
 	names := g.hideBlocked(ctx, d, dev, s)
