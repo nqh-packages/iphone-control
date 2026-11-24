@@ -106,6 +106,9 @@ type Input struct {
 	Submit    bool            // OpType: press Enter afterwards
 	LongPress bool            // OpTap
 	Key       string          // OpKey
+	// Secret is set when the text is a secret reference (vault.ParseRef);
+	// its value is never in Text.
+	Secret bool // OpType
 	// Move is where a phone_swipe moves the finger, its end minus its
 	// start; zero when unknown (a pinch, a drag, a check without one).
 	Move screen.Point // OpSwipe

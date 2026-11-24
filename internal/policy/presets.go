@@ -446,7 +446,7 @@ func (e *Engine) blockedLocked(app screen.App) (string, bool) {
 	}
 	cats := e.apps.Categories(app)
 	for _, r := range e.rulesLocked() {
-		if r.Decision == Deny && r.Match.appLevel() && r.matchesApp(app, cats) {
+		if r.Decision == Deny && r.Match.appLevel() && r.matchesApp(app, cats) && !e.secretLiftLocked(app, r) {
 			return r.Name, true
 		}
 	}

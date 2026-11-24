@@ -26,8 +26,15 @@ type File struct {
 	// fields, and tap an app's own passcode keypad, on virtual phones (an
 	// emulator or a Simulator on this computer), for signing in with test
 	// accounts. Phones are refused as ever. Default false.
-	VirtualCredentials bool   `yaml:"virtual_credentials,omitempty"`
-	Rules              []Rule `yaml:"rules"`
+	VirtualCredentials bool `yaml:"virtual_credentials,omitempty"`
+	// CredentialApps lists, by bundle id or package name, the apps where
+	// agents may type a secret from the credential broker ({{secret:NAME}})
+	// into password and one-time-code fields. A finance app or password
+	// manager on it is not blocked; its payments still ask. Literal text
+	// into those fields stays refused everywhere. The owner edits it;
+	// agents cannot.
+	CredentialApps []string `yaml:"credential_apps,omitempty"`
+	Rules          []Rule   `yaml:"rules"`
 	// AlwaysAllow holds the person's "Always allow" answers to approvals
 	// (see Exemption), oldest first.
 	AlwaysAllow []Exemption `yaml:"always_allow,omitempty"`

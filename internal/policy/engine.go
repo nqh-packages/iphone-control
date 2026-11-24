@@ -194,7 +194,11 @@ func (e *Engine) Evaluate(in Input) Verdict {
 	kinds := detect(in, cats)
 	system := contains(cats, CatSystem)
 
-	if in.Op == OpType && IsCredentialField(in.Target) && !(in.Virtual && e.file.VirtualCredentials) {
+	if in.Secret {
+		if v, done := e.secretVerdictLocked(in, kinds); done {
+			return v
+		}
+	} else if in.Op == OpType && IsCredentialField(in.Target) && !(in.Virtual && e.file.VirtualCredentials) {
 		reason := "Pinky never types into password or one-time-code fields; call phone_handoff so the person can fill it."
 		if in.Virtual {
 			reason += " On a virtual phone the person may allow it in Pinky's Settings › Safety."
@@ -231,7 +235,7 @@ func (e *Engine) Evaluate(in Input) Verdict {
 		if !r.matches(app, cats, kinds, in) {
 			continue
 		}
-		if lift && r.Decision == Deny && r.Match.appLevel() {
+		if (lift || e.secretLiftLocked(app, r)) && r.Decision == Deny && r.Match.appLevel() {
 			continue // the person allowed this blocked app for the task
 		}
 		if r.Decision == Ask {
