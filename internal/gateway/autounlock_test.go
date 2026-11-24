@@ -448,3 +448,33 @@ func TestAutoUnlockPINReachesNoLogStepResultOrError(t *testing.T) {
 		t.Fatal("the canary read no log of an unlock: the check proves nothing")
 	}
 }
+
+func TestAutoUnlockOutcomeIsReportedAfterTheDeviceActionLockIsFree(t *testing.T) {
+	var r *unlockRig
+	var mu sync.Mutex
+	var held []bool
+	r = newUnlockRig(t, func(o *Options) {
+		inner := o.PINOutcome
+		o.PINOutcome = func(id string, err error) {
+			r.g.mu.Lock()
+			d := r.g.devices[id]
+			r.g.mu.Unlock()
+			free := d.act.TryLock()
+			if free {
+				d.act.Unlock()
+			}
+			mu.Lock()
+			held = append(held, !free)
+			mu.Unlock()
+			inner(id, err)
+		}
+	})
+	r.x.pin = "4711"
+	_, res := r.connect("Lunch")
+	mustStatus(t, res, StatusLocked)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(held) != 1 || held[0] {
+		t.Fatalf("PINOutcome ran with the device action lock held: %v", held)
+	}
+}

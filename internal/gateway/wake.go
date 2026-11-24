@@ -113,8 +113,8 @@ func (g *Gateway) Unlock(deviceID string) error {
 	start := time.Now()
 	err = u.Unlock(ctx, pin)
 	pin = ""
-	g.pinOutcome(d.id, err)
 	d.act.Unlock()
+	g.pinOutcome(d.id, err)
 	if err != nil {
 		// Drivers never put the PIN in their errors.
 		g.log.Info("unlock from the computer", "device", d.id, "ok", false, "err", err.Error())
