@@ -673,6 +673,42 @@ pinkyctl task list
 
 `run` and `steer` wait for the task to end: its steps and a line when it waits for the person go to stderr, and only the final status line and summary to stdout (`run -detach` prints only the `task_id`). `status`, `cancel` and `list` print the tool's answer. Ctrl-C cancels the task and exits 130. Otherwise the exit status is 0 when the task was done (or the call worked, for `status`, `cancel` and `list`), 1 when it ended otherwise (`failed`, `refused`, `limit_reached`, `cancelled`, `stopped`), and 2 for usage errors, a call Pinky refused (such as `unsupported` while Pinky's window is closed) and a task that could not run (`no_key`, `bad_key`, `error`).
 
+### From a shell: pinkyctl phone
+
+`pinkyctl phone status|tools|call|run` drives the phone from a shell through the phone_* tools above. It lists no tool itself: `tools` and the name check in `call` read the gateway's live `tools/list`, so a tool the server adds works at once. It is an MCP client of the daemon's socket (the same `PINKY_HOME`) and never starts a daemon: with no socket it exits 3. The agent's name is `-as`, else `$IPHONE_LEASE_HOLDER`, else "Pinky CLI". `-wait S` is how long to queue for the phone with `phone_connect`'s `wait_ms` (default 60).
+
+```sh
+pinkyctl phone status [-device D] [-as NAME]
+pinkyctl phone tools [--json] [name]
+pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
+pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
+```
+
+`status` prints one JSON line and takes no lease: `{"free":true,"device":"iPhone SE","holder":null,"task":null,"reserved_for":null,"reserved_left_s":0,"waiting":0,"link":"usb","health":"idle"}`. `free` is false while someone holds the phone, waits in line, or the person has it; a phone kept for a name after its `phone_release` is free for that name only (`-as`). `health` is the phone's status as `pinkyctl devices --json` gives it.
+
+`call` takes the tool with or without `phone_`. A `k=v` value that is JSON is JSON (`ref=12`, `screenshot=true`), anything else is a string. Outside a run it is a one-call run: it takes the phone, calls, and releases. Each one pays the first-screen read of `phone_connect`, and its release withdraws open approvals, so anything that may ask the person, or more than two calls, belongs in `run`.
+
+`run` holds one session and one lease for a whole script (`sh` text, a file, or stdin). The lease is taken before the script's first call that needs one, queueing for what is left of `-wait`, and released when the script ends: `done` when it exits 0, `failed` otherwise, also after SIGINT or SIGTERM. `phone call` and `phone status` inside the script work as written, through the run's session (`$PINKY_PHONE_RUN`); only what the script prints enters the agent's context. The task title defaults to `<script> · <pid>`, which is unique per run.
+
+```sh
+pinkyctl phone run -as ui-audit -wait 120 -e '
+phone call launch app=Settings >/dev/null
+phone call observe | grep -c button'
+```
+
+The tool's text goes to stdout unchanged. A screenshot is never printed: it is written to `$TMPDIR/pinky-phone/<run>/<n>.jpg` and stdout gets `image: <path> · <bytes>`. `run` ends with one stderr line, `[code-mode: 41.2KB tool output -> 0.3KB printed (99.3%)]`. The CLI's own errors are plain English and end with a `fix:` line.
+
+| Exit | Meaning |
+|---|---|
+| 0 | the tool answered with a status (`settled`, `approval_pending`, `stale`, …) |
+| 1 | the tool answered `error: <code>` |
+| 2 | usage error, or no such tool |
+| 3 | no gateway on the socket |
+| 4 | `lease_held` after `-wait` ran out |
+| 5 | the person has the phone or must act: `user_took_over`, `paused`, `stopped`, `device_locked`, `device_needs_setup`, `error: device_paused` |
+
+`run` returns the script's own status, or 128 plus the signal after SIGINT or SIGTERM. The status line's keys are pinned by `cmd/pinky/testdata/phone-status.golden.json`.
+
 ## Saving screenshots and reports
 
 An agent that writes a bug report or a pull request can keep what it saw as files: `phone_observe { save: "onboarding-1.png" }` saves a screenshot, and `phone_release { export: true }` the task's report. Both write into the phone's folder on the computer, `<data>/files/<phone id>/` (the one `phone_files` uses), and nothing to the phone, so they ask nothing, except for a screen recording: read-only and watch-only agents may save, in read-only mode too. They work on every phone, iPhones included. A Pinky without a data folder returns `unsupported`.
