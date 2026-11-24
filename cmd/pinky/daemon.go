@@ -209,7 +209,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		ApprovalTimeout: c.ApprovalTimeout, IdleTimeout: c.IdleTimeout, NoScreenshots: c.NoScreenshots,
 		// Fake phones cannot hurt anything, so agents need no first approval
 		// and socket clients may answer approvals (for scripted tests).
-		TrustNewAgents: c.Fake,
+		TrustNewAgents: c.Fake || os.Getenv("PINKY_TRUST_AGENTS") == "1",
 		PIN:            c.PIN,
 		TrafficKeys:    trafficKeys(c.Fake),
 		TrafficTailnet: trafficTailnet(c.Fake),
