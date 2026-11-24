@@ -80,7 +80,8 @@ func phoneUsage(w io.Writer) {
   pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
   pinkyctl phone pin (set | check | delete) [-device D]
   pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
-  pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID]
+  pinkyctl phone login (set | check | delete) -name NAME
+  pinkyctl phone fill (-account NAME | -login ID) [-ref N] [-submit] [-app BUNDLE_ID]
 
 status prints one JSON line: free, device, holder, task, reserved_for,
 reserved_left_s, waiting, link, health. tools lists the gateway's phone_*
@@ -125,6 +126,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneRunCmd(args[1:], pio)
 	case "pin":
 		return phonePinCmd(args[1:], pio)
+	case "login":
+		return phoneLoginCmd(args[1:], pio)
 	case "fill":
 		return phoneFillCmd(args[1:], pio)
 	case "secret":

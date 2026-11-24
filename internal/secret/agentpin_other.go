@@ -12,3 +12,6 @@ func (unsupportedPINs) Save(string, string) error   { return ErrUnsupported }
 func (unsupportedPINs) Delete(string) error         { return ErrUnsupported }
 func (unsupportedPINs) Exists(string) (bool, error) { return false, ErrUnsupported }
 func (unsupportedPINs) Read(string) (string, error) { return "", ErrUnsupported }
+
+// NewAgentLogins has no keychain to keep passwords in on this system.
+func NewAgentLogins() PINStore { return unsupportedPINs{} }

@@ -13,6 +13,21 @@ seams:
       - cmd/pinky/autounlock.go
       - cmd/pinky/phone_pin.go
     fix: "get the passcode through gateway.Options.PIN, which cmd/pinky/autounlock.go wires; only the daemon wiring and the `phone pin` verbs build the store. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: no-prompt login store
+    package: github.com/DIYgod/pinky/internal/secret
+    symbols:
+      - NewAgentLogins
+    allowed:
+      - cmd/pinky/phone_login.go
+    fix: "the agents' own account passwords are read only through `agentLogins` in cmd/pinky/phone_login.go, which `phone login` and `phone fill -account` use. If another file really needs the store, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: no-prompt login store variable
+    package: github.com/DIYgod/pinky/cmd/pinky
+    idents:
+      - agentLogins
+    allowed:
+      - cmd/pinky/phone_login.go
+      - cmd/pinky/phone_fill.go
+    fix: "only phone_login.go (the `phone login` verbs) and phone_fill.go (`phone fill -account`) name the store. If another file really needs one, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
   - name: no-prompt passcode store variables
     package: github.com/DIYgod/pinky/cmd/pinky
     idents:
@@ -36,7 +51,8 @@ seams:
       - StageSecret
     allowed:
       - cmd/pinky/phone_secret.go
-    fix: "secrets are staged only by `pinkyctl phone secret put` (cmd/pinky/phone_secret.go), which the owner's credential broker runs. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+      - cmd/pinky/phone_fill.go
+    fix: "secrets are staged only by `pinkyctl phone secret put` (cmd/pinky/phone_secret.go), which the owner's credential broker runs, and by `phone fill -account` (cmd/pinky/phone_fill.go), which stages a password the owner saved once for the agents' own account. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
   - name: secret hand-out
     package: github.com/DIYgod/pinky/internal/vault
     methods:

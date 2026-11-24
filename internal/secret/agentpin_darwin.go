@@ -127,3 +127,11 @@ func (k agentKeychain) Read(account string) (string, error) {
 	}
 	return string(unsafe.Slice((*byte)(s.CFDataGetBytePtr(data)), n)), nil
 }
+
+// AgentLoginService is the keychain service of the passwords the fork's
+// `phone fill -account` types for the agents' own accounts.
+const AgentLoginService = "app.pinky.agent.login"
+
+// NewAgentLogins keeps those passwords in the login keychain; like the
+// passcodes, a read never asks the person.
+func NewAgentLogins() PINStore { return newAgentKeychain(AgentLoginService) }

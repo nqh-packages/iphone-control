@@ -330,6 +330,8 @@ What is refused, each with a `fix:` line and nothing done:
 - a secret that is not staged, expired, used, or staged for another app than the one in front (`not_found`; the message does not say which app a name was staged for);
 - a daemon with no vault (`blocked_by_policy`).
 
+**No approval for the agents' own account:** `pinkyctl phone login set -name NAME` saves that account's password once in the Mac keychain (read without prompting, like the passcode); `pinkyctl phone fill -account NAME [-ref N] [-submit]` then types it with no one asked.
+
 **One command for both steps:** `pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID]` runs the broker (`cred run`) for the saved login, stages the password under a fresh name for the app on screen (read from the screen unless `-app` names it) and types it with `phone_type`. The owner approves each use in the broker. Exit 5 means the owner did not approve.
 
 Staging a name that still holds a live secret is refused (`pinkyctl phone secret put` says so, with a fix line): use another name, or wait until it is used or expires. A driver failure while a secret is typed is reported as "typing the secret failed; check the field and stage it again", without the driver's text. While `rules.yaml` cannot be read, no secret is staged or typed anywhere.

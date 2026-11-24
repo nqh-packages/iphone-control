@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -13,6 +14,8 @@ import (
 	"regexp"
 	"strings"
 	"time"
+
+	"github.com/DIYgod/pinky/internal/vault"
 )
 
 // pinkyctl phone fill types a saved login's password into a field of the
@@ -23,12 +26,15 @@ import (
 
 func phoneFillUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  pinkyctl phone fill -login ID [-ref N] [-submit] [-app BUNDLE_ID] [-as NAME] [-wait S] [-device D]
+  pinkyctl phone fill (-account NAME | -login ID) [-ref N] [-submit] [-app BUNDLE_ID] [-as NAME] [-wait S] [-device D]
 
-fill types the password of the broker login ID (cred find) into the field ref
+fill types a saved password into the field ref
 (the focused field without -ref) and presses Enter with -submit. The app that
 shows the field is read from the screen unless -app names it; it must be on
-credential_apps in rules.yaml. The owner approves each use in the broker.
+credential_apps in rules.yaml. -account NAME uses the password the owner saved
+for the agents' own account (phone login set): no one is asked. -login ID is
+another person's login in the credential broker (cred find): the owner approves
+each use there.
 `)
 }
 
@@ -38,13 +44,14 @@ func phoneFillCmd(args []string, pio phoneIO) int {
 	fs := phoneFlags("fill", pio)
 	fs.SetOutput(io.Discard)
 	login := fs.String("login", "", "")
+	account := fs.String("account", "", "")
 	ref := fs.Int("ref", 0, "")
 	submit := fs.Bool("submit", false, "")
 	app := fs.String("app", "", "")
 	as := fs.String("as", "", "")
 	wait := fs.Float64("wait", 60, "")
 	device := fs.String("device", "", "")
-	if err := fs.Parse(args); err != nil || *login == "" {
+	if err := fs.Parse(args); err != nil || (*login == "") == (*account == "") {
 		phoneFillUsage(pio.err)
 		return phoneExitUsage
 	}
@@ -80,7 +87,11 @@ func phoneFillCmd(args []string, pio phoneIO) int {
 	b := make([]byte, 4)
 	rand.Read(b)
 	name := "fill-" + hex.EncodeToString(b)
-	if code := phoneStage(ctx, exe, *login, bundle, name, pio); code != phoneExitOK {
+	stage := func() int { return phoneStage(ctx, exe, *login, bundle, name, pio) }
+	if *account != "" {
+		stage = func() int { return phoneStageOwn(ctx, *account, bundle, name, pio) }
+	}
+	if code := stage(); code != phoneExitOK {
 		outcome = code
 		return code
 	}
@@ -137,4 +148,28 @@ func isExit(err error) bool { _, ok := err.(*exec.ExitError); return ok }
 func phoneFirstLine(s string) string {
 	s, _, _ = strings.Cut(strings.TrimSpace(s), "\n")
 	return s
+}
+
+// phoneStageOwn stages the saved password of an agents' own account for the
+// app through the daemon's vault, asking no one.
+func phoneStageOwn(ctx context.Context, account, bundle, name string, pio phoneIO) int {
+	pw, err := agentLogins().Read(account)
+	if err != nil || pw == "" {
+		return phoneFail(pio, phoneExitUsage, fmt.Sprintf("no password is saved for account %q", account), "the owner saves it once: `pinkyctl phone login set -name "+account+"`")
+	}
+	sock, err := phoneVaultSocket()
+	if err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "run `pinkyctl phone status`")
+	}
+	sctx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	_, err = vault.StageSecret(sctx, sock, bundle, 0, []string{name}, strings.NewReader(pw+"\n"))
+	var se *vault.StageError
+	switch {
+	case errors.As(err, &se):
+		return phoneFail(pio, phoneExitToolError, se.Msg, se.Fix)
+	case err != nil:
+		return phoneFail(pio, phoneExitNoGateway, err.Error(), "check that the daemon runs: `pinkyctl phone status`")
+	}
+	return phoneExitOK
 }
