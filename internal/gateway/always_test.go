@@ -19,7 +19,13 @@ import (
 // the demo apps' categories.
 func loadPolicy(t *testing.T, dir string) *policy.Engine {
 	t.Helper()
-	pol, err := policy.Load(filepath.Join(dir, "rules.yaml"), filepath.Join(dir, "apps.yaml"))
+	rules := filepath.Join(dir, "rules.yaml")
+	if _, err := os.Stat(rules); err != nil {
+		if err := os.WriteFile(rules, append(policy.DefaultRulesYAML(), []byte("\nguards:\n  payments: ask\n")...), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	pol, err := policy.Load(rules, filepath.Join(dir, "apps.yaml"))
 	if err != nil {
 		t.Fatal(err)
 	}

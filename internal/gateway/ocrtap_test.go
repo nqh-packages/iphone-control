@@ -9,7 +9,6 @@ import (
 
 	"github.com/DIYgod/pinky/internal/demo"
 	"github.com/DIYgod/pinky/internal/driver"
-	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/internal/screen"
 )
 
@@ -50,7 +49,7 @@ func (d *textDev) reads() int {
 // newDevGateway runs a gateway on one wrapped demo phone.
 func newDevGateway(t *testing.T, base *demo.Device, dev driver.Device, opts ...func(*Options)) *Gateway {
 	t.Helper()
-	pol := policy.Default()
+	pol := askingPayments()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}

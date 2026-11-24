@@ -22,7 +22,9 @@ import (
 // which the default preset (payments only) lets through.
 func testPolicy(t testing.TB) *policy.Engine {
 	t.Helper()
-	pol := policy.Default()
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	pol := policy.New(f, nil)
 	if err := pol.SetPreset(policy.PresetCommits); err != nil {
 		t.Fatal(err)
 	}
@@ -30,6 +32,12 @@ func testPolicy(t testing.TB) *policy.Engine {
 		pol.AddApps(cat, e)
 	}
 	return pol
+}
+
+func askingPayments() *policy.Engine {
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	return policy.New(f, nil)
 }
 
 func newTestGateway(t *testing.T, opts ...func(*Options)) (*Gateway, *demo.Device) {
@@ -1192,7 +1200,7 @@ func TestIdleWiFiPhoneLockSlower(t *testing.T) {
 // a message goes out without asking, a payment still asks.
 func TestDefaultAsksBeforePaymentsOnly(t *testing.T) {
 	g, dev := newTestGateway(t, func(o *Options) {
-		pol := policy.Default()
+		pol := askingPayments()
 		for cat, e := range demo.PolicyApps() {
 			pol.AddApps(cat, e)
 		}

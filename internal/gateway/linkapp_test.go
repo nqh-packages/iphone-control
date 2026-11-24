@@ -223,7 +223,7 @@ func TestPhoneWithoutLinks(t *testing.T) {
 func TestPaymentLinkAsks(t *testing.T) {
 	ctx := context.Background()
 	phone := &linkPhone{handler: opensIn(driver.App{ID: demo.Dinely, Name: "Dinely"})}
-	g := newLinkGateway(t, phone, func(o *Options) { o.Policy = policy.Default() })
+	g := newLinkGateway(t, phone, func(o *Options) { o.Policy = askingPayments() })
 	s, _ := connect(t, g, "Pay")
 	answer(t, g, Deny, func(n NeedView) {
 		if n.Rule != "Payments" || n.Title != "Open “upi://pay?pa=shop@upi&am=100” in Dinely?" {

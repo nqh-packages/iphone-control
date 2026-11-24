@@ -833,7 +833,7 @@ func detect(in Input, cats []string) []Kind {
 		// A payment: a commit that moves money by itself, or any commit on
 		// a screen that shows an amount, but for a chat's send button,
 		// whose message an amount in the chat's history does not make one.
-		if (hasKind(kinds, Commit) || hasKind(kinds, InstallApp)) &&
+		if !(has(CatSettings) && !hasCurrency(label) && !screenHasCurrency(in.Screen)) && (hasKind(kinds, Commit) || hasKind(kinds, InstallApp)) &&
 			(money || isMoneyIcon(t) || hasCurrency(label) ||
 				(screenHasCurrency(in.Screen) && (hasKind(kinds, InstallApp) || !sendsChatMessage(t, in.Screen, cats)))) {
 			add(Payment)

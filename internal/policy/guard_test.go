@@ -137,7 +137,7 @@ func TestSettingsGuardsStayInSettings(t *testing.T) {
 			t.Errorf("%q in a chat app: %+v", l, v)
 		}
 	}
-	for _, l := range []string{"Delete", "Send", "Wi-Fi", "Turn Passcode On", "Change Passcode"} {
+	for _, l := range []string{"Delete", "Send", "Wi-Fi", "Turn Passcode On", "Change Passcode", "Transfer or Reset iPhone"} {
 		if v := e.Evaluate(tapOn(settingsPhone, *button(l))); v.Decision != Allow {
 			t.Errorf("%q in Settings: %+v", l, v)
 		}
