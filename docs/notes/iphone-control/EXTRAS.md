@@ -20,7 +20,10 @@ Synthesis of two independent designs (`extras-design-opus.md`, `extras-design-ge
    - The broker asks the owner to approve each staging, so credential typing is not fully autonomous. This is accepted.
 3. **Settled open questions:** a listed bank app gets ordinary treatment (screenshots, recording); apps' own passcode keypads stay refused in v1; `rules.yaml` is only as strong as file access;
    the daemon binary is signed with the owner's Apple Development identity so the keychain ACL survives rebuilds (verified in build step 10).
-4. **Not in this design:** setting the phone's passcode the first time (a device step after unlock lands), and notification reading (a skill recipe, no gateway code).
+4. **Settled risks of autonomous unlock** (review of slice 1, 2026-11-24):
+   - A process of the owner's own user can run `pinkyctl phone pin set` and so reset the one-wrong-try latch. iOS's own lockout bounds the guessing, and such a process can already do worse as the user. Accepted.
+   - The person-respect check runs once, before the passcode is entered, and the driver cannot see touches made on the phone itself. A person who picks the phone up during the seconds an unlock takes is not noticed until it is done. Accepted; stated in `docs/mcp.md`.
+5. **Not in this design:** setting the phone's passcode the first time (a device step after unlock lands), and notification reading (a skill recipe, no gateway code).
 
 ## Build order
 
@@ -31,7 +34,10 @@ Slice 1, unlock: steps 5, 6, 7, 8 (unlock part), 9 (unlock docs), then device st
 Where the build differs from `extras-design-opus.md`, 2026-11-24:
 
 - `secret.AgentPINs` takes a `PINStore` (`NewAgentPINsOn`, with `MemoryPINStore` for tests); `State` returns an error; the outcome callback is split into `Refused` and `Entered`, because `secret` must not import `driver` (the mapping is `pinOutcome` in `cmd/pinky/autounlock.go`). A handout starts the one-minute wait, and `Entered` clears it; `Unlock` also reports `nil` when it finds the phone already unlocked, so that wait is not left behind.
-- A refusal is kept in the keychain and in memory, so a store that cannot take the marker still holds it for the run.
+- A refusal is kept in the keychain and in memory, so a store that cannot take the marker still holds it for the run. The in-memory refusal is tied to an HMAC of the refused passcode (key in memory only), so `pin set` of a different passcode from another process is tried by the running daemon, and the same one stays refused until a restart.
+- An iOS unlock that stops between keys (a failed key, a lost look at the lock) wraps `driver.ErrLocked`, as Android's does, so it latches the refusal; before the first key it wraps `ErrPINNotEntered`. The outcome handler runs after the device's action lock is released, because it writes the marker to the keychain.
+- `pin set -file` opens the file once (no symlink, no blocking), reads at most 66 bytes (a 64-character passcode and a CRLF; a bigger file is refused and left alone), and deletes only the file it opened. Ctrl-C at the prompt puts the terminal's echo back.
+- The seam guard also names two package variables (`idents`): `autoUnlockPINs` and `phonePINs` may be named only by the two files that build the store.
 - `secret.PINFix` words the fix line of each error once, for the CLI and for the agent's note.
 - `pin set` also takes `-file`, which is zeroed and deleted after reading, valid or not.
 - An agent that may only watch never triggers an unlock (the design was silent).
@@ -58,3 +64,7 @@ Where the build differs from `extras-design-opus.md`, 2026-11-24:
   - **The iOS driver's `Type` pastes through the phone's pasteboard** (`internal/driver/ios/type.go`: it saves the pasteboard, sets the text, pastes, restores), so a secret sits on the phone's general pasteboard for a moment, and falls back to keys only when the service is unavailable. Until the driver has a no-paste option (`driver.TypeOptions`, out of this slice), typing a secret on an iPhone through that path is not proven safe: settle it in device step 12 before relying on it.
   - The driver's input note (`TakeInputNote`) holds only fixed sentences and counts (`internal/driver/ios/type.go` `judgeTyped`, `internal/driver/android/typecheck.go` `noteHidden`, `noteUnread`, the "N characters where M were typed" counts), never field text, so nothing masks it; a typed value's length can show in a read-back error.
 - Unproven until device step 12: whether WDA reports a secure field's value as dots or empty, that iOS shows no last typed character, and the socket's peer-uid check against a second user (the code mirrors `internal/api`'s).
+
+## Where a typed secret goes on an iPhone
+
+The iOS 27 CoreDevice typing path (`Device.Type`, `internal/driver/ios/type.go`) pastes through the phone's pasteboard, so a typed secret may sit on it for a moment there, until the driver puts the old contents back. The iOS 26 WDA path, the one on the owner's phone (`WDADevice.Type` in `internal/driver/ios/wda_device.go`, `keys` in `wda.go` posting to `/wda/keys`), types by keys and does not touch the pasteboard.

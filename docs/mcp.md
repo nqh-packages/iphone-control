@@ -764,12 +764,12 @@ pinkyctl phone pin delete [-device D]
 
 There is no way to show the passcode, and the CLI never takes it as an argument. `-device` must be an id the gateway lists (`PINKY_ALLOW_DEVICES` when no daemon runs); with one phone it can be left out. The passcode lives in the login keychain under its own service (`app.pinky.agent`), which only this build of `pinky` reads, and reading never shows a prompt.
 
-- **One wrong try, ever.** Once the phone refuses the saved passcode, Pinky never enters it again, across restarts, until `pinkyctl phone pin set` runs again. A passcode that was handed out but never entered (the passcode screen was not reached) waits a minute before the next try.
-- **A person's phone is left alone.** While the person has taken over, or touched the phone in the last minute, nothing is entered. An agent that may only watch never unlocks.
+- **One wrong try, ever.** Once the phone refuses the saved passcode (or an unlock stops between its keys, so an attempt may have been used), Pinky never enters it again, across restarts, until `pinkyctl phone pin set` runs again. A different passcode saved while the daemon runs is tried at the next call; the same one saved again lifts the refusal only after the daemon restarts. A passcode that was handed out but never entered (the passcode screen was not reached) waits a minute before the next try.
+- **A person's phone is left alone.** While the person has taken over, or touched the phone in the last minute, nothing is entered. An agent that may only watch never unlocks. The check runs once, before the passcode is entered: the driver cannot see a touch made on the phone itself, so a person who picks the phone up in the seconds an unlock takes is not noticed until it is done.
 - **No saved passcode** answers `device_locked` at once. The same goes for a locked login keychain and for a build of `pinky` the keychain does not trust: each message says which, and ends with a `fix:` line (`pinkyctl phone pin set -device <id>`, unlock the keychain). A call with too little of its 45 s left does not try; the next call does.
 - The passcode never reaches a log, a history step, a recording, an event or an error: Pinky logs only `auto unlock` with `ok` and a fixed reason code, and the step reads "Unlocked from the computer".
 
-With it on, the Unlock button in the app's client (the control socket's `unlock`) also enters the saved passcode without Touch ID, as it is the same path.
+The control socket's `unlock` is a different path and stays closed: in the daemon that socket is untrusted (`Trusted` is set only for fake phones), so `unlock` answers `this method needs the person` and enters nothing, saved passcode or not. Only the desktop app's own window, which asks for Touch ID, can unlock from the computer.
 
 ## Saving screenshots and reports
 
