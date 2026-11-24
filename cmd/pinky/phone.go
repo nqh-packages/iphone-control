@@ -8,12 +8,16 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"net"
 	"os"
+	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
+	"syscall"
 	"time"
 
 	sdk "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -43,6 +47,10 @@ const (
 // phoneHolderDefault is the agent name phone commands show in Pinky without
 // -as or IPHONE_LEASE_HOLDER.
 const phoneHolderDefault = "Pinky CLI"
+
+// phoneRunEnv names the unix socket of the phone run a script is part of:
+// phone call inside the script goes through that run's session.
+const phoneRunEnv = "PINKY_PHONE_RUN"
 
 // phoneHolderEnv names the agent, when -as is not given.
 const phoneHolderEnv = "IPHONE_LEASE_HOLDER"
@@ -101,6 +109,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneToolsCmd(args[1:], pio)
 	case "call":
 		return phoneCallCmd(args[1:], pio)
+	case "run":
+		return phoneRunCmd(args[1:], pio)
 	case "help", "-h", "--help", "-help":
 		phoneUsage(pio.out)
 		return phoneExitOK
@@ -633,6 +643,9 @@ func phoneCallCmd(args []string, pio phoneIO) int {
 	if err != nil {
 		return phoneFail(pio, phoneExitUsage, err.Error(), "pass one JSON object, or key=value pairs")
 	}
+	if sock := os.Getenv(phoneRunEnv); sock != "" {
+		return phoneViaRun(sock, tool, callArgs, pio)
+	}
 	ctx := context.Background()
 	cs, code := phoneSession(ctx, *as, pio)
 	if cs == nil {
@@ -653,4 +666,194 @@ func phoneCallCmd(args []string, pio phoneIO) int {
 func (rep phoneReply) write(pio phoneIO) {
 	io.WriteString(pio.out, rep.Out)
 	io.WriteString(pio.err, rep.Err)
+}
+
+// phoneViaRun makes one call through the session of the run this script
+// belongs to: one JSON line to its socket, one phoneReply line back.
+func phoneViaRun(sock, tool string, args map[string]any, pio phoneIO) int {
+	c, err := net.Dial("unix", sock)
+	if err != nil {
+		return phoneFail(pio, phoneExitNoGateway, "the phone run this script belongs to is gone",
+			"call phone only from a script started by `pinkyctl phone run`")
+	}
+	defer c.Close()
+	if err := json.NewEncoder(c).Encode(map[string]any{"tool": tool, "args": args}); err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "run the script again")
+	}
+	var rep phoneReply
+	if err := json.NewDecoder(c).Decode(&rep); err != nil {
+		return phoneFail(pio, phoneExitToolError, "the phone run ended before it answered", "run the script again")
+	}
+	rep.write(pio)
+	return rep.Code
+}
+
+// serve answers the script's phone calls on ln: one JSON line each way.
+func (r *phoneRun) serve(ctx context.Context, ln net.Listener) {
+	for {
+		c, err := ln.Accept()
+		if err != nil {
+			return
+		}
+		go func() {
+			defer c.Close()
+			var req struct {
+				Tool string         `json:"tool"`
+				Args map[string]any `json:"args"`
+			}
+			if json.NewDecoder(c).Decode(&req) != nil {
+				return
+			}
+			if req.Args == nil {
+				req.Args = map[string]any{}
+			}
+			json.NewEncoder(c).Encode(r.do(ctx, req.Tool, req.Args))
+		}()
+	}
+}
+
+// countWriter counts the bytes a script prints.
+type countWriter struct {
+	w io.Writer
+	n atomic.Int64
+}
+
+func (c *countWriter) Write(b []byte) (int, error) {
+	c.n.Add(int64(len(b)))
+	return c.w.Write(b)
+}
+
+func shellQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", `'\''`) + "'" }
+
+// phoneExitStatus is a finished script's exit status: 128 plus the signal
+// that ended it.
+func phoneExitStatus(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		if ws, ok := ee.Sys().(syscall.WaitStatus); ok && ws.Signaled() {
+			return 128 + int(ws.Signal())
+		}
+		return ee.ExitCode()
+	}
+	return phoneExitToolError
+}
+
+// phoneScript is the command a run executes and the name its task takes.
+func phoneScript(fs *flag.FlagSet, eText string, pio phoneIO) (cmd *exec.Cmd, name string, err error) {
+	switch {
+	case eText != "":
+		return exec.Command("sh", append([]string{"-c", eText, "sh"}, fs.Args()...)...), "script", nil
+	case fs.NArg() == 1 && fs.Arg(0) == "-":
+		b, err := io.ReadAll(pio.in)
+		if err != nil {
+			return nil, "", err
+		}
+		return exec.Command("sh", "-c", string(b)), "stdin", nil
+	case fs.NArg() >= 1:
+		file := fs.Arg(0)
+		st, err := os.Stat(file)
+		if err != nil {
+			return nil, "", err
+		}
+		if st.Mode()&0o111 != 0 {
+			if !strings.ContainsRune(file, filepath.Separator) {
+				file = "." + string(filepath.Separator) + file
+			}
+			return exec.Command(file, fs.Args()[1:]...), filepath.Base(file), nil
+		}
+		return exec.Command("sh", fs.Args()...), filepath.Base(file), nil
+	}
+	return nil, "", errors.New("run needs a script")
+}
+
+func kb(n int64) string { return fmt.Sprintf("%.1fKB", float64(n)/1024) }
+
+func phoneRunCmd(args []string, pio phoneIO) int {
+	fs := phoneFlags("run", pio)
+	as := fs.String("as", "", "the agent name")
+	wait := fs.Float64("wait", 60, "seconds to queue for the phone")
+	task := fs.String("task", "", "the task title shown in Pinky")
+	device := fs.String("device", "", "the phone, by id or name")
+	eText := fs.String("e", "", "shell text to run")
+	if code, ok := phoneParse(fs, args); !ok {
+		return code
+	}
+	cmd, name, err := phoneScript(fs, *eText, pio)
+	if err != nil {
+		return phoneFail(pio, phoneExitUsage, err.Error(), "run `pinkyctl phone run (<file> | -e '<sh>' | -)`")
+	}
+	cs, code := phoneSession(context.Background(), *as, pio)
+	if cs == nil {
+		return code
+	}
+	defer cs.Close()
+	if *task == "" {
+		*task = fmt.Sprintf("%s · %d", name, os.Getpid())
+	}
+	r := newPhoneRun(cs, *task, *device, time.Duration(*wait*float64(time.Second)))
+
+	dir, err := os.MkdirTemp("", "pp-")
+	if err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "check that $TMPDIR is writable")
+	}
+	defer os.RemoveAll(dir)
+	exe, err := os.Executable()
+	if err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "run pinkyctl by its path")
+	}
+	shim := "#!/bin/sh\nexec " + shellQuote(exe) + ` phone "$@"` + "\n"
+	if err := os.WriteFile(filepath.Join(dir, "phone"), []byte(shim), 0o700); err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "check that $TMPDIR is writable")
+	}
+	sock := filepath.Join(dir, "s")
+	ln, err := net.Listen("unix", sock)
+	if err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "check that $TMPDIR is writable and its path is short")
+	}
+	defer ln.Close()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go r.serve(ctx, ln)
+
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	defer signal.Stop(sigs)
+
+	printed := &countWriter{w: pio.out}
+	cmd.Env = append(os.Environ(), phoneRunEnv+"="+sock, "PATH="+dir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = pio.in, printed, pio.err
+	cmd.WaitDelay = 3 * time.Second
+	if err := cmd.Start(); err != nil {
+		return phoneFail(pio, phoneExitToolError, err.Error(), "check the script path and its permissions")
+	}
+	done := make(chan error, 1)
+	go func() { done <- cmd.Wait() }()
+	var status int
+	select {
+	case err := <-done:
+		status = phoneExitStatus(err)
+	case sig := <-sigs:
+		cancel()
+		cmd.Process.Signal(sig)
+		select {
+		case <-done:
+		case <-time.After(5 * time.Second):
+			cmd.Process.Kill()
+			<-done
+		}
+		status = 128
+		if s, ok := sig.(syscall.Signal); ok {
+			status += int(s)
+		}
+	}
+	r.release(phoneOutcome(status))
+	line := fmt.Sprintf("[code-mode: %s tool output -> %s printed", kb(r.in.Load()), kb(printed.n.Load()))
+	if in := r.in.Load(); in > 0 {
+		line += fmt.Sprintf(" (%.1f%%)", max(0, 100*(1-float64(printed.n.Load())/float64(in))))
+	}
+	fmt.Fprintln(pio.err, line+"]")
+	return status
 }

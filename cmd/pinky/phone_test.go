@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -244,6 +245,9 @@ func TestPhoneExitCodes(t *testing.T) {
 	if code != phoneExitBusy || !strings.HasPrefix(out, "error: lease_held") || time.Since(start) < 900*time.Millisecond {
 		t.Errorf("busy: exit %d after %v\n%s%s", code, time.Since(start), out, errOut)
 	}
+	if code, _, errOut := phone("run", "-wait", "1", "-e", "phone call observe"); code != phoneExitBusy {
+		t.Errorf("run's script saw exit %d, want %d\n%s", code, phoneExitBusy, errOut)
+	}
 }
 
 func TestPhoneExitNoGateway(t *testing.T) {
@@ -283,5 +287,69 @@ func TestPhoneImageToFile(t *testing.T) {
 	}
 	if len(out) > 4000 {
 		t.Fatalf("stdout is %d bytes: the picture must not be inline", len(out))
+	}
+}
+
+func TestPhoneRunOneLease(t *testing.T) {
+	env := newPhoneEnv(t, func(o *gateway.Options) { o.LeaseReserve = 5 * time.Second })
+	before := env.view(t).LeaseGen
+	script := `phone call observe >/dev/null && phone call observe >/dev/null && phone call observe | head -1`
+	code, out, errOut := phone("run", "-as", "ui-audit", "-e", script)
+	if code != phoneExitOK || !strings.HasPrefix(out, "settled") || strings.Count(out, "\n") != 1 {
+		t.Fatalf("run: exit %d\n%s\n%s", code, out, errOut)
+	}
+	if !strings.Contains(errOut, "[code-mode: ") || !strings.Contains(errOut, " tool output -> ") {
+		t.Fatalf("no code-mode line on stderr: %q", errOut)
+	}
+	v := env.view(t)
+	if got := v.LeaseGen - before; got != 2 {
+		t.Fatalf("LeaseGen moved by %d over three calls, want 2 (one lease started, one ended)", got)
+	}
+	if v.Lease.Holder != "" || v.Lease.ReservedFor != "ui-audit" {
+		t.Fatalf("after the run: %+v", v.Lease)
+	}
+	_, out, _ = phone("status", "-as", "ui-audit")
+	var s phoneStatus
+	if err := json.Unmarshal([]byte(out), &s); err != nil || s.Holder != nil || s.ReservedFor == nil || *s.ReservedFor != "ui-audit" || !s.Free || s.ReservedLeftS < 1 {
+		t.Fatalf("status for ui-audit: %s %v", out, err)
+	}
+	_, out, _ = phone("status")
+	if err := json.Unmarshal([]byte(out), &s); err != nil || s.Free {
+		t.Fatalf("status for another name must not be free while the phone is kept: %s", out)
+	}
+}
+
+func TestPhoneRunReleasesOnSignal(t *testing.T) {
+	env := newPhoneEnv(t, func(o *gateway.Options) { o.LeaseReserve = 5 * time.Second })
+	type result struct {
+		code     int
+		out, err string
+	}
+	res := make(chan result, 1)
+	go func() {
+		c, o, e := phone("run", "-as", "sigrun", "-e", "phone call observe >/dev/null; echo ready; exec sleep 30")
+		res <- result{c, o, e}
+	}()
+	deadline := time.Now().Add(10 * time.Second)
+	for env.view(t).Lease.Holder != "sigrun" {
+		if time.Now().After(deadline) {
+			t.Fatal("the run never took the phone")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if err := syscall.Kill(os.Getpid(), syscall.SIGTERM); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case r := <-res:
+		if r.code != 128+int(syscall.SIGTERM) {
+			t.Fatalf("exit %d, want 143\n%s\n%s", r.code, r.out, r.err)
+		}
+	case <-time.After(15 * time.Second):
+		t.Fatal("the run did not end after SIGTERM")
+	}
+	if l := env.view(t).Lease; l.Holder != "" || l.ReservedFor != "sigrun" {
+		t.Fatalf("after SIGTERM the phone must be released and kept for the run's name: %+v", l)
 	}
 }
