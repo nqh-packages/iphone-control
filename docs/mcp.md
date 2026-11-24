@@ -769,7 +769,7 @@ There is no way to show the passcode, and the CLI never takes it as an argument.
 - **No saved passcode** answers `device_locked` at once. The same goes for a locked login keychain and for a build of `pinky` the keychain does not trust: each message says which, and ends with a `fix:` line (`pinkyctl phone pin set -device <id>`, unlock the keychain). A call with too little of its 45 s left does not try; the next call does.
 - The passcode never reaches a log, a history step, a recording, an event or an error: Pinky logs only `auto unlock` with `ok` and a fixed reason code, and the step reads "Unlocked from the computer".
 
-The control socket's `unlock` is a different path and stays closed: in the daemon that socket is untrusted (`Trusted` is set only for fake phones), so `unlock` answers `this method needs the person` and enters nothing, saved passcode or not. Only the desktop app's own window, which asks for Touch ID, can unlock from the computer.
+The control socket's `unlock` is a different path and stays closed: in the daemon that socket is untrusted (`Trusted` is set only for fake phones), so `unlock` answers `this method needs the person` and enters nothing, saved passcode or not. Only the desktop app, which calls the gateway in its own process and asks for Touch ID first, unlocks from the computer.
 
 ## Saving screenshots and reports
 
