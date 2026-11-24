@@ -8,7 +8,9 @@ import (
 
 // SecretApp reports whether the app's exact id is on the owner's
 // credential_apps list. A name never counts: an app can call itself
-// anything, but it cannot take another app's id.
+// anything, but it cannot take another app's id. While rules.yaml cannot be
+// read, the list counts as empty: the rest of the rules stay in force, but a
+// list nobody can check is not trusted.
 func (e *Engine) SecretApp(appID string) bool {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
@@ -16,7 +18,7 @@ func (e *Engine) SecretApp(appID string) bool {
 }
 
 func (e *Engine) secretAppLocked(appID string) bool {
-	return appID != "" && contains(e.file.CredentialApps, appID)
+	return appID != "" && e.rulesDisk.err == nil && contains(e.file.CredentialApps, appID)
 }
 
 // secretVerdictLocked decides the credentials check of an action whose text
@@ -28,6 +30,10 @@ func (e *Engine) secretVerdictLocked(in Input, kinds []Kind) (Verdict, bool) {
 			Reason: "A secret goes only into a password or one-time-code field; this is not one. fix: pass the ref of the password or code field."}, true
 	}
 	if !e.secretAppLocked(in.App.ID) {
+		if err := e.rulesDisk.err; err != nil {
+			return Verdict{Decision: Deny, Rule: RuleCredentials, Kinds: kinds,
+				Reason: fmt.Sprintf("rules.yaml cannot be read (%v), so Pinky types no secret anywhere until it is fixed. fix: ask the owner to correct rules.yaml, or call phone_handoff.", err)}, true
+		}
 		return Verdict{Decision: Deny, Rule: RuleCredentials, Kinds: kinds,
 			Reason: fmt.Sprintf("%s is not on the owner's credential_apps list, so Pinky types no secret there. fix: ask the owner to add %s to credential_apps in rules.yaml, or call phone_handoff.",
 				appName(in.App), idOrName(in.App))}, true

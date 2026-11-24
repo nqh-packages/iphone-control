@@ -139,8 +139,11 @@ func (v *Vault) handle(c net.Conn) {
 	ttl := ClampTTL(time.Duration(h.TTLMS) * time.Millisecond)
 	if err := v.Deposit(h.App, ttl, values); err != nil {
 		fix := "check the name and the value"
-		if errors.Is(err, ErrAppNotAllowed) {
+		switch {
+		case errors.Is(err, ErrAppNotAllowed):
 			fix = "the owner adds " + h.App + " to credential_apps in rules.yaml"
+		case errors.Is(err, ErrNameInUse):
+			fix = "use another name, or wait until the staged secret is used or expires"
 		}
 		fail(err.Error(), fix)
 		return

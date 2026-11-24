@@ -133,7 +133,7 @@ func (g *Gateway) refreshRules() {
 	changes := g.policy.Refresh()
 	for _, c := range changes {
 		if c.Err != nil {
-			g.log.Warn("rules file edited, but it cannot be used; keeping the rules in force", "path", c.Path, "err", c.Err)
+			g.log.Warn("rules file edited, but it cannot be used; keeping the rules in force, and typing no secret until it is fixed", "path", c.Path, "err", c.Err)
 		} else {
 			g.log.Info("rules file edited; using it", "path", c.Path)
 		}

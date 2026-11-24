@@ -3,9 +3,11 @@ package vault
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
+	"unicode/utf8"
 
 	"github.com/DIYgod/pinky/internal/screen"
 )
@@ -26,8 +28,12 @@ var (
 	// ErrNotStaged is returned when no unused, unexpired secret has the name.
 	ErrNotStaged = errors.New("vault: secret not staged")
 	// ErrWrongApp is returned when the secret was staged for another app than
-	// the one in front.
+	// the one in front. Its message does not say which app.
 	ErrWrongApp = errors.New("vault: secret staged for another app")
+	// ErrNameInUse is returned by Deposit for a name that still holds a live
+	// secret: it is not replaced, so a later stager cannot swap a value
+	// someone else staged.
+	ErrNameInUse = errors.New("vault: secret name in use")
 	// ErrAppNotAllowed is returned when the app is not one the owner lets
 	// agents type secrets into.
 	ErrAppNotAllowed = errors.New("vault: app not allowed for secrets")
@@ -75,7 +81,8 @@ func New(allowed func(appID string) bool) *Vault {
 
 // Deposit stages values by name for one app, for ttl (DefaultTTL when zero, at
 // most MaxTTL), each used once. It takes copies of the values, which the
-// caller should wipe. A name staged again replaces the earlier value.
+// caller should wipe. A name that still holds a live secret (unused and
+// unexpired) is refused with ErrNameInUse, and nothing is kept.
 func (v *Vault) Deposit(app string, ttl time.Duration, named map[string][]byte) error {
 	if app == "" || !v.allowed(app) {
 		return &refusal{ErrAppNotAllowed, fmt.Sprintf("%s is not on credential_apps", app)}
@@ -94,14 +101,14 @@ func (v *Vault) Deposit(app string, ttl time.Duration, named map[string][]byte) 
 	now := v.now()
 	v.pruneLocked(now)
 	for name := range named {
-		if _, replaced := v.slots[name]; !replaced && len(v.slots) >= maxSlots {
-			return &refusal{ErrBadSecret, "too many secrets are staged; use or wait out the others"}
+		if v.slots[name] != nil {
+			return &refusal{ErrNameInUse, fmt.Sprintf("a secret named %s is already staged", name)}
 		}
 	}
+	if len(v.slots)+len(named) > maxSlots {
+		return &refusal{ErrBadSecret, "too many secrets are staged; use or wait out the others"}
+	}
 	for name, val := range named {
-		if old := v.slots[name]; old != nil {
-			wipe(old.value)
-		}
 		v.slots[name] = &slot{app: app, value: append([]byte(nil), val...), expires: now.Add(ttl)}
 	}
 	return nil
@@ -150,7 +157,7 @@ func (v *Vault) checkLocked(name string, app screen.App) (*slot, error) {
 		return nil, &refusal{ErrNotStaged, fmt.Sprintf("no secret named %s is staged for %s (staged secrets last %d s and are used once)", name, app.ID, int(DefaultTTL/time.Second))}
 	}
 	if s.app != app.ID {
-		return nil, &refusal{ErrWrongApp, fmt.Sprintf("%s was staged for %s, but %s is in front", name, s.app, app.ID)}
+		return nil, &refusal{ErrWrongApp, fmt.Sprintf("no secret named %s is staged for %s (staged secrets last %d s and are used once)", name, app.ID, int(DefaultTTL/time.Second))}
 	}
 	return s, nil
 }
@@ -177,7 +184,7 @@ func (v *Vault) pruneLocked(now time.Time) {
 }
 
 // Mask replaces, wherever it shows in a read, every value typed in the last
-// ten minutes with "••••": Element.Label (iOS puts a field's typed value
+// ten minutes, in any letter case, with "••••": Element.Label (iOS puts a field's typed value
 // there), Element.Content, OCR elements and Event.Text. It marks the changed
 // elements Masked, so pictures of them are covered. Element.ID and Path are
 // platform identifiers, never typed text, and are left alone. The screen gets
@@ -189,9 +196,9 @@ func (v *Vault) Mask(s *screen.Screen) int {
 	}
 	v.mu.Lock()
 	v.pruneLocked(v.now())
-	values := make([]string, len(v.typed))
+	values := make([]masker, len(v.typed))
 	for i, t := range v.typed {
-		values[i] = string(t.value)
+		values[i] = newMasker(string(t.value))
 	}
 	v.mu.Unlock()
 	if len(values) == 0 {
@@ -231,11 +238,24 @@ func (v *Vault) Mask(s *screen.Screen) int {
 	return n
 }
 
-func maskText(text string, values []string) string {
-	for _, val := range values {
-		if text != "" && strings.Contains(text, val) {
-			text = strings.ReplaceAll(text, val, maskDots)
-		}
+type masker func(string) string
+
+// newMasker hides one value in any letter case. A value that is not valid
+// UTF-8 has no letter case and is hidden exactly.
+func newMasker(value string) masker {
+	if utf8.ValidString(value) {
+		re := regexp.MustCompile("(?i)" + regexp.QuoteMeta(value))
+		return func(text string) string { return re.ReplaceAllLiteralString(text, maskDots) }
+	}
+	return func(text string) string { return strings.ReplaceAll(text, value, maskDots) }
+}
+
+func maskText(text string, values []masker) string {
+	if text == "" {
+		return text
+	}
+	for _, mask := range values {
+		text = mask(text)
 	}
 	return text
 }

@@ -144,3 +144,40 @@ func TestCredentialAppsFile(t *testing.T) {
 		t.Fatal("saving the file dropped credential_apps")
 	}
 }
+
+// TestCredentialAppsFailClosed: a rules.yaml that stops parsing empties the
+// credential_apps list for secrets, with a reason the owner can read, and
+// the list comes back when the file is fixed.
+func TestCredentialAppsFailClosed(t *testing.T) {
+	dir := t.TempDir()
+	rules, apps := filepath.Join(dir, "rules.yaml"), filepath.Join(dir, "apps.yaml")
+	good := strings.Replace(string(DefaultRulesYAML()), "credential_apps: []", "credential_apps:\n  - "+secretShop.ID, 1)
+	if err := os.WriteFile(rules, []byte(good), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e, err := Load(rules, apps)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !e.SecretApp(secretShop.ID) {
+		t.Fatal("the list was not read")
+	}
+	if err := os.WriteFile(rules, []byte("credential_apps: [unclosed\nrules: {"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.Refresh()
+	if e.SecretApp(secretShop.ID) {
+		t.Fatal("a rules.yaml that cannot be read kept the old list")
+	}
+	v := e.Evaluate(secretIn(secretShop, secretPW))
+	if v.Decision != Deny || v.Rule != RuleCredentials || !strings.Contains(v.Reason, "rules.yaml cannot be read") || !strings.Contains(v.Reason, "fix:") {
+		t.Fatalf("verdict %+v", v)
+	}
+	if err := os.WriteFile(rules, []byte(good+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	e.Refresh()
+	if !e.SecretApp(secretShop.ID) {
+		t.Fatal("the list did not come back when the file was fixed")
+	}
+}

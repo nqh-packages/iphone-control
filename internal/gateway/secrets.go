@@ -3,7 +3,6 @@ package gateway
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/DIYgod/pinky/internal/driver"
 	"github.com/DIYgod/pinky/internal/policy"
@@ -46,7 +45,7 @@ func (g *Gateway) secretReady(a Action, p *prep) *Result {
 
 // secretFix is the fix line for a secret that is not staged.
 func secretFix(name string, app screen.App, err error) string {
-	if !errors.Is(err, vault.ErrNotStaged) {
+	if !errors.Is(err, vault.ErrNotStaged) && !errors.Is(err, vault.ErrWrongApp) {
 		return ""
 	}
 	return fmt.Sprintf(" fix: stage it again: cred run --login <id> --reason '...' --stdin '{password}' -- pinkyctl phone secret put -app %s %s", app.ID, name)
@@ -97,11 +96,17 @@ type scrubbed struct {
 func (e *scrubbed) Error() string { return e.msg }
 func (e *scrubbed) Unwrap() error { return e.err }
 
+// secretTypeFailed is what the agent, the history and the log hear when a
+// driver fails while typing a secret. A driver's error can quote part of the
+// value or say how long it is, so its text never travels; its class does.
+const secretTypeFailed = "typing the secret failed; check the field and stage it again"
+
 // scrubSecret keeps a driver's error from carrying the value it was given:
-// for a secret, the value in the message becomes dots.
+// for a secret, the message becomes secretTypeFailed, and only the error's
+// class (offline, locked, timed out and the like) stays for errors.Is.
 func scrubSecret(err error, a Action, typed string) error {
-	if err == nil || typed == a.Text || !strings.Contains(err.Error(), typed) {
+	if err == nil || typed == a.Text {
 		return err
 	}
-	return &scrubbed{msg: strings.ReplaceAll(err.Error(), typed, "••••"), err: err}
+	return &scrubbed{msg: secretTypeFailed, err: err}
 }

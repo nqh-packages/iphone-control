@@ -56,6 +56,24 @@ type secretRig struct {
 
 func newSecretRig(t *testing.T, listed ...string) *secretRig {
 	t.Helper()
+	return newSecretRigWith(t, nil, listed...)
+}
+
+type wrappedProvider struct {
+	driver.Provider
+	wrap func(driver.Device) driver.Device
+}
+
+func (p wrappedProvider) Open(ctx context.Context, id string) (driver.Device, error) {
+	d, err := p.Provider.Open(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	return p.wrap(d), nil
+}
+
+func newSecretRigWith(t *testing.T, wrap func(driver.Device) driver.Device, listed ...string) *secretRig {
+	t.Helper()
 	f := policy.DefaultFile()
 	f.CredentialApps = listed
 	pol := policy.New(f, nil)
@@ -67,6 +85,9 @@ func newSecretRig(t *testing.T, listed ...string) *secretRig {
 	dir := t.TempDir()
 	g, dev := newTestGateway(t, func(o *Options) {
 		o.Policy, o.Secrets, o.DataDir, o.NoScreenshots = pol, v, dir, false
+		if wrap != nil {
+			o.Providers = []driver.Provider{&wrappedProvider{o.Providers[0], wrap}}
+		}
 		o.Logger = slog.New(slog.NewTextHandler(logs, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	})
 	dev.Show("account")
@@ -314,8 +335,8 @@ func TestSecretStagedForAnotherApp(t *testing.T) {
 	r := newSecretRig(t, demo.Dinely, demo.Chatter)
 	r.stage(t, demo.Chatter, "pw", canarySentinel)
 	res := r.typeRef(t, "Password", vault.Ref("pw"), false)
-	if res.Error != ErrNotFound || !strings.Contains(res.Message, demo.Chatter) || typedByDevice(r.dev, canarySentinel) != 0 {
-		t.Fatalf("typed into the wrong app: %+v", res)
+	if res.Error != ErrNotFound || strings.Contains(res.Message, demo.Chatter) || !strings.Contains(res.Message, "fix: stage it again") || typedByDevice(r.dev, canarySentinel) != 0 {
+		t.Fatalf("typed into the wrong app, or told which app the name was staged for: %+v", res)
 	}
 	if err := r.v.Staged("pw", screen.App{ID: demo.Chatter}); err != nil {
 		t.Fatalf("the secret was used up: %v", err)
@@ -410,5 +431,38 @@ func TestSecretIsTakenBeforeTheFocusingTap(t *testing.T) {
 	}
 	if strings.Contains(err.Error(), canarySentinel) {
 		t.Fatalf("the error holds a value: %v", err)
+	}
+}
+
+type failingTyper struct {
+	driver.Device
+	err error
+}
+
+func (f failingTyper) Type(context.Context, string, driver.TypeOptions) error { return f.err }
+
+// TestSecretDriverErrorNeverTravels: a driver error that quotes a character
+// of the value or its length reaches no reader; the agent hears one fixed
+// sentence, and the class of the error still decides the result.
+func TestSecretDriverErrorNeverTravels(t *testing.T) {
+	const leakA, leakB = "'ä' at offset 3", "(11 characters where 14 were expected)"
+	cause := fmt.Errorf("type: after typing by keys the field reads otherwise than the text %s: first non-ASCII %s: %s", leakB, leakA, "the keyboard did not answer")
+	r := newSecretRigWith(t, func(d driver.Device) driver.Device { return failingTyper{d, cause} }, demo.Dinely)
+	r.stage(t, demo.Dinely, "pw", "pässword-"+canarySentinel)
+	res := r.typeRef(t, "Password", vault.Ref("pw"), false)
+	r.g.Flush()
+	tasks, err := r.g.History(context.Background(), HistoryQuery{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	rows, _ := json.Marshal(tasks)
+	seen := resultText(res) + string(rows) + nonImageFiles(t, r.dir) + r.logs.String()
+	for _, leak := range []string{"ä", "characters where", "offset", "reads otherwise"} {
+		if strings.Contains(seen, leak) {
+			t.Errorf("the driver's error text %q travelled: %s", leak, seen)
+		}
+	}
+	if !strings.Contains(res.Message, secretTypeFailed) || res.Status != StatusUncertain {
+		t.Fatalf("want the fixed sentence and an uncertain result: %+v", res)
 	}
 }

@@ -117,7 +117,7 @@ func TestVaultBoundToOneApp(t *testing.T) {
 			t.Fatalf("%+v: %v", app, err)
 		}
 	}
-	if _, err := v.TakeSecret("pw", other); !errors.Is(err, ErrWrongApp) {
+	if _, err := v.TakeSecret("pw", other); !errors.Is(err, ErrWrongApp) || strings.Contains(err.Error(), bank.ID) {
 		t.Fatalf("another listed app: %v", err)
 	}
 	if got, err := v.TakeSecret("pw", bank); err != nil || got != sentinel {
@@ -158,8 +158,29 @@ func TestVaultRefusesWhatItCannotMask(t *testing.T) {
 	if err := v.Deposit(bank.ID, 0, map[string][]byte{"extra": []byte(sentinel)}); !errors.Is(err, ErrBadSecret) {
 		t.Errorf("slot %d: %v", maxSlots+1, err)
 	}
-	if err := v.Deposit(bank.ID, 0, map[string][]byte{"na": []byte(sentinel + "2")}); err != nil {
-		t.Errorf("replacing a staged name: %v", err)
+}
+
+func TestVaultLiveNameIsNotReplaced(t *testing.T) {
+	v, now := newTestVault(bank.ID)
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte(sentinel)}); err != nil {
+		t.Fatal(err)
+	}
+	err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte("attacker-value"), "other": []byte(sentinel)})
+	if !errors.Is(err, ErrNameInUse) {
+		t.Fatalf("a live name was replaced: %v", err)
+	}
+	if err := v.Staged("other", bank); !errors.Is(err, ErrNotStaged) {
+		t.Fatalf("a refused request kept one of its names: %v", err)
+	}
+	if got, err := v.TakeSecret("pw", bank); err != nil || got != sentinel {
+		t.Fatalf("the first value did not survive: %q %v", got, err)
+	}
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte("second-value")}); err != nil {
+		t.Fatalf("a used name cannot be staged again: %v", err)
+	}
+	*now = now.Add(MaxTTL)
+	if err := v.Deposit(bank.ID, 0, map[string][]byte{"pw": []byte("third-value")}); err != nil {
+		t.Fatalf("an expired name cannot be staged again: %v", err)
 	}
 }
 
@@ -233,6 +254,30 @@ func TestMask(t *testing.T) {
 	*now = now.Add(typedFor + time.Second)
 	if n := v.Mask(read()); n != 0 {
 		t.Errorf("masked %d after the window", n)
+	}
+}
+
+func TestMaskIgnoresLetterCase(t *testing.T) {
+	v, _ := newTestVault(bank.ID)
+	for name, val := range map[string]string{"a": "Hunter-2 x", "b": "bad\xffbytes"} {
+		if err := v.Deposit(bank.ID, 0, map[string][]byte{name: []byte(val)}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := v.TakeSecret(name, bank); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := &screen.Screen{Elements: []screen.Element{
+		{Label: "user typed HUNTER-2 X here"},
+		{Label: "hunter-2 x"},
+		{Label: "bad\xffbytes"},
+		{Label: "hunter-3 x"},
+	}}
+	if n := v.Mask(s); n != 3 {
+		t.Fatalf("masked %d, want 3: %+v", n, s.Elements)
+	}
+	if s.Elements[0].Label != "user typed •••• here" || s.Elements[1].Label != "••••" || s.Elements[2].Label != "••••" || s.Elements[3].Masked {
+		t.Fatalf("%+v", s.Elements)
 	}
 }
 
@@ -318,6 +363,23 @@ func TestSocketRefusals(t *testing.T) {
 	}
 	if _, err := StageSecret(ctx, filepath.Join(filepath.Dir(sock), "none.sock"), bank.ID, 0, []string{"pw"}, strings.NewReader(sentinel+"\n")); err == nil || strings.Contains(err.Error(), sentinel) {
 		t.Fatalf("no daemon: %v", err)
+	}
+}
+
+func TestSocketRefusesALiveName(t *testing.T) {
+	v, _ := newTestVault(bank.ID)
+	sock := socketPair(t, v)
+	ctx := context.Background()
+	if _, err := StageSecret(ctx, sock, bank.ID, 0, []string{"pw"}, strings.NewReader(sentinel+"\n")); err != nil {
+		t.Fatal(err)
+	}
+	_, err := StageSecret(ctx, sock, bank.ID, 0, []string{"pw"}, strings.NewReader("attacker-value\n"))
+	var se *StageError
+	if !errors.As(err, &se) || !strings.Contains(se.Msg, "already staged") || !strings.Contains(se.Fix, "another name") || strings.Contains(err.Error(), "attacker-value") {
+		t.Fatalf("a live name: %v", err)
+	}
+	if got, err := v.TakeSecret("pw", bank); err != nil || got != sentinel {
+		t.Fatalf("the first value did not survive: %q %v", got, err)
 	}
 }
 
