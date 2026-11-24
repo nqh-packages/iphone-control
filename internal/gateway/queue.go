@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"context"
+	"fmt"
 	"time"
 )
 
@@ -43,6 +44,89 @@ type LeaseView struct {
 // file); without, it is connect: lease_held at once, as before.
 func (s *Session) Connect(ctx context.Context, req ConnectRequest) *Result {
 	return s.connect(ctx, req)
+}
+
+// turnLocked decides, inside connect's critical section, right after
+// adoption and before the other-task check, whether s may take d now. nil:
+// go on (connect then creates the lease without unlocking, so the decision
+// cannot go stale). A result: lease_held with Holder set. With wait == 0, no
+// tickets and no reservation it returns nil, and upstream's lease_held texts
+// stand. The caller holds g.mu.
+func (g *Gateway) turnLocked(s *Session, d *device, wait time.Duration) *Result {
+	if d.lease != nil && d.lease.session == s {
+		return nil
+	}
+	ln := &d.line
+	now := time.Now()
+	ln.prune(now)
+	mine := ln.reserved == s.agent.Name || (ln.reserved == "" && (len(ln.tickets) == 0 || ln.tickets[0].session == s))
+	if d.lease == nil && mine {
+		ln.remove(s)
+		ln.reserved = ""
+		return nil
+	}
+	if d.lease != nil && len(ln.tickets) == 0 && ln.reserved == "" {
+		return nil
+	}
+	return g.heldLocked(s, d, now)
+}
+
+// heldLocked is the lease_held answer to s, which does not have its turn on d.
+func (g *Gateway) heldLocked(s *Session, d *device, now time.Time) *Result {
+	ln := &d.line
+	var res *Result
+	switch {
+	case d.lease != nil:
+		holder := fmt.Sprintf("%s · %s", d.lease.session.agent.Name, d.lease.task.title)
+		res = errResult(ErrLeaseHeld, "%s is in use by %s. %d waiting.", d.name(), holder, len(ln.tickets))
+		res.Holder = holder
+	case ln.reserved != "":
+		res = errResult(ErrLeaseHeld, "%s is kept for %s for %d s.", d.name(), ln.reserved, int((ln.until.Sub(now)+time.Second-1)/time.Second))
+		res.Holder = ln.reserved
+	default:
+		res = errResult(ErrLeaseHeld, "%s is next for %s. %d waiting.", d.name(), ln.tickets[0].session.agent.Name, len(ln.tickets))
+		res.Holder = ln.tickets[0].session.agent.Name
+	}
+	res.Device = d.id
+	return res
+}
+
+// prune drops the tickets whose session is closed, whose deadline passed, or
+// that are not waiting and were last called more than ticketGrace ago, and
+// a reservation past its end.
+func (ln *line) prune(now time.Time) {
+	live := ln.tickets[:0]
+	for _, t := range ln.tickets {
+		if t.session.closed || now.After(t.deadline) || !t.waiting && now.Sub(t.lastCall) > ticketGrace {
+			continue
+		}
+		live = append(live, t)
+	}
+	clear(ln.tickets[len(live):])
+	ln.tickets = live
+	if ln.reserved != "" && !now.Before(ln.until) {
+		ln.reserved = ""
+	}
+}
+
+func (ln *line) remove(s *Session) {
+	for i, t := range ln.tickets {
+		if t.session == s {
+			ln.tickets = append(ln.tickets[:i], ln.tickets[i+1:]...)
+			return
+		}
+	}
+}
+
+// reserveLocked keeps d for the agent that just released it, for
+// Options.LeaseReserve. Called only from Release, after endLeaseLocked:
+// only an agent's own "run ended" reserves. Stop, pause, idle expiry,
+// offline and a dropped session never reserve. The caller holds g.mu.
+func (g *Gateway) reserveLocked(d *device, agent string) {
+	if g.opt.LeaseReserve <= 0 {
+		return
+	}
+	d.line.reserved, d.line.until = agent, time.Now().Add(g.opt.LeaseReserve)
 }
 
 // leaseViewLocked is d's LeaseView, with dead tickets left out. The caller holds g.mu.

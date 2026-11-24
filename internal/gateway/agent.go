@@ -675,6 +675,10 @@ func (s *Session) connect(ctx context.Context, req ConnectRequest) *Result {
 		return res
 	}
 	g.adoptLocked(s, d, title)
+	if res := g.turnLocked(s, d, req.Wait); res != nil {
+		g.mu.Unlock()
+		return res
+	}
 	if l := d.lease; s.runsOtherTask(l, title) {
 		// Never end another task of this session, or of an earlier one of
 		// its agent, for this one: it may be another conversation's.
@@ -1344,6 +1348,7 @@ func (s *Session) Release(ctx context.Context, req ReleaseRequest) *Result {
 		g.addStepLocked(l.task, StepView{Tool: "phone_release", Args: argsJSON(map[string]any{"outcome": outcome, "summary": req.Summary}),
 			Text: "Finished: " + outcome, Status: string(StatusSettled), At: time.Now()}, "", "")
 		g.endLeaseLocked(l, outcome, req.Summary)
+		g.reserveLocked(l.dev, s.agent.Name)
 	}
 	g.mu.Unlock()
 	if len(released) == 0 {
