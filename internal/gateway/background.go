@@ -143,6 +143,7 @@ func (g *Gateway) readyScreen(ctx context.Context, l *lease) {
 	g.mu.Unlock()
 	if !onBG {
 		g.wake(ctx, d)
+		g.autoUnlock(ctx, l)
 	}
 }
 

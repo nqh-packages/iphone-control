@@ -79,6 +79,15 @@ type Options struct {
 	// it through driver.Unlocker and forgets it. Nil means unlocking from
 	// the computer is not available.
 	PIN func(ctx context.Context, deviceID string) (string, error)
+	// AutoUnlock lets an agent's call unlock a locked phone with PIN
+	// itself, without the person, before the call reads or acts. It never
+	// unlocks while the person holds the phone. Default off.
+	AutoUnlock bool
+	// PINOutcome hears how each entry of a saved PIN ended (nil, an error
+	// that wraps driver.ErrLocked for a refusal, driver.ErrPINNotEntered,
+	// other), so the PIN's owner can stop handing out a refused PIN. Nil:
+	// nobody listens.
+	PINOutcome func(deviceID string, err error)
 
 	// Pinky's traffic capture (capture.go). TrafficPort is the proxy's
 	// port, default TrafficPort; TrafficSetupPort the port of its setup
@@ -143,6 +152,7 @@ type Gateway struct {
 	store     *history.Store // nil without DataDir
 	approvals *approval.Center
 	rec       *recorder
+	auto      autoUnlocker
 
 	mu          sync.Mutex
 	devices     map[string]*device

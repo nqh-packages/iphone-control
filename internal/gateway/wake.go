@@ -105,6 +105,7 @@ func (g *Gateway) Unlock(deviceID string) error {
 	if locked, known := g.lockedNow(ctx, dev); known && !locked {
 		d.act.Unlock()
 		g.log.Info("unlock from the computer: the phone is already unlocked", "device", d.id)
+		g.pinOutcome(d.id, nil)
 		g.setLocked(d, false)
 		g.answerUnlockHandoffs(d)
 		return nil
@@ -112,6 +113,7 @@ func (g *Gateway) Unlock(deviceID string) error {
 	start := time.Now()
 	err = u.Unlock(ctx, pin)
 	pin = ""
+	g.pinOutcome(d.id, err)
 	d.act.Unlock()
 	if err != nil {
 		// Drivers never put the PIN in their errors.

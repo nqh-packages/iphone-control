@@ -471,6 +471,7 @@ func personAllowed(v policy.Verdict) bool {
 
 // act is the pipeline for one action on a lease that is already acquired.
 func (g *Gateway) act(ctx context.Context, l *lease, c Call, a Action) *Result {
+	g.autoUnlock(ctx, l)
 	if res := g.gate(l, c.ApprovalID, true); res != nil {
 		return res
 	}
