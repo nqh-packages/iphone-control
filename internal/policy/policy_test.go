@@ -440,7 +440,7 @@ func TestLegacyRulesFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.Preset() != PresetCommits || len(e.Rules()) != len(commitRules)+2+len(builtinRules) {
+	if e.Preset() != PresetCommits || len(e.Rules()) != len(commitRules)+len(guardRules)+2+len(builtinRules) {
 		t.Fatalf("migrated: preset %d, %d rules", e.Preset(), len(e.Rules()))
 	}
 	// A hand-edited file without the Commits rule keeps exactly its rules.

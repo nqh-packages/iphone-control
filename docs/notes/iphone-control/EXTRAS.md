@@ -80,3 +80,17 @@ Review of slice 2, 2026-11-24:
 ## Where a typed secret goes on an iPhone
 
 The iOS 27 CoreDevice typing path (`Device.Type`, `internal/driver/ios/type.go`) pastes through the phone's pasteboard, so a typed secret may sit on it for a moment there, until the driver puts the old contents back. The iOS 26 WDA path, the one on the owner's phone (`WDADevice.Type` in `internal/driver/ios/wda_device.go`, `keys` in `wda.go` posting to `/wda/keys`), types by keys and does not touch the pasteboard.
+
+## Settings actions that always ask
+
+Under presets 1, 2 and 3, a tap in Settings (`com.apple.Preferences`) asks before the few things that cannot be undone or lock the person out (`guardRules` in `internal/policy/presets.go`; tests in `guard_test.go`):
+
+| Rule name | Label contains (case-insensitive) |
+|---|---|
+| `Erase this iPhone` | `Erase All Content and Settings`, `Erase iPhone` |
+| `Apple Account` | `Sign Out`, `Delete Account` |
+| `Passcode` | `Turn Passcode Off` |
+
+Payments already ask under preset 2. Nothing else new asks: messages, deletions, installs, links and other settings changes stay free there. The same words in any other app ask nothing new. The rules ride with the preset, not in `rules.yaml`, so an existing file, untouched or hand edited, gets them without being rewritten; preset 0 ("only the rules below") has none.
+
+Unproven: the labels are the iOS Settings strings as known, not read from the phone. A label that differs (another language, a changed iOS version) is not guarded until it is added to `guardRules`.

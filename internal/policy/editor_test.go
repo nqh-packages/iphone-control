@@ -168,20 +168,20 @@ func TestBuiltInRules(t *testing.T) {
 		}
 		return out
 	}
-	if got := names(); !reflect.DeepEqual(got, []string{"Payments", RuleBlocked}) {
+	if got := names(); !reflect.DeepEqual(got, []string{"Payments", RuleEraseDevice, RuleAppleAccount, RulePasscode, RuleBlocked}) {
 		t.Fatalf("built in with the default, preset 2: %q", got)
 	}
 	if err := e.SetPreset(PresetCommits); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"Payments", "Messages", "Commits", "Installs and links", "Calls", "Settings changes", RuleBlocked}
+	want := []string{"Payments", RuleEraseDevice, RuleAppleAccount, RulePasscode, "Messages", "Commits", "Installs and links", "Calls", "Settings changes", RuleBlocked}
 	if got := names(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("built in with preset 1: %q", got)
 	}
 	if err := e.SetPreset(PresetEvery); err != nil {
 		t.Fatal(err)
 	}
-	if got := names(); len(got) != 8 || got[6] != RuleEvery {
+	if got := names(); len(got) != 11 || got[9] != RuleEvery {
 		t.Fatalf("built in with preset 3: %q", got)
 	}
 	// Copies: changing them changes nothing.

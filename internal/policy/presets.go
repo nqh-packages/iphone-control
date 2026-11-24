@@ -56,16 +56,48 @@ var commitRules = []Rule{
 	ask("Settings changes", string(ChangeSetting)),
 }
 
+// RuleEraseDevice, RuleAppleAccount and RulePasscode name the guard rules
+// below on the approval card.
+const (
+	RuleEraseDevice  = "Erase this iPhone"
+	RuleAppleAccount = "Apple Account"
+	RulePasscode     = "Passcode"
+)
+
+// settingsApp is the iOS Settings app, the only app the guard rules cover.
+const settingsApp = "com.apple.Preferences"
+
+func settingsAsk(name string, labels ...string) Rule {
+	return Rule{Name: name, Match: Match{App: StringList{settingsApp}, Label: StringList(labels)}, Decision: Ask}
+}
+
+// guardRules ask before the few things in Settings that cannot be undone
+// or lock the person out: erasing the phone, signing out of or deleting
+// the Apple Account, and removing the passcode. Every preset except none
+// carries them, so they reach a rules file written by any earlier version.
+var guardRules = []Rule{
+	settingsAsk(RuleEraseDevice, "Erase All Content and Settings", "Erase iPhone"),
+	settingsAsk(RuleAppleAccount, "Sign Out", "Delete Account"),
+	settingsAsk(RulePasscode, "Turn Passcode Off"),
+}
+
+// withGuards puts guardRules after the first rule, payments, and before the
+// general ones so they name the result.
+func withGuards(rules []Rule) []Rule {
+	out := append([]Rule(nil), rules[:1]...)
+	out = append(out, guardRules...)
+	return append(out, rules[1:]...)
+}
+
 // presetRules returns the rules a preset adds.
 func presetRules(p Preset) []Rule {
 	switch p {
 	case PresetCommits:
-		return commitRules
+		return withGuards(commitRules)
 	case PresetPayments:
-		return commitRules[:1]
+		return withGuards(commitRules[:1])
 	case PresetEvery:
-		out := append([]Rule(nil), commitRules...)
-		return append(out, ask(RuleEvery, string(OpTap), string(OpType), string(OpSwipe), string(OpKey), string(OpLaunch), string(OpStop)))
+		return append(withGuards(commitRules), ask(RuleEvery, string(OpTap), string(OpType), string(OpSwipe), string(OpKey), string(OpLaunch), string(OpStop)))
 	}
 	return nil
 }
