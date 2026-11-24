@@ -227,7 +227,7 @@ func TestCountsAgentsAndPerson(t *testing.T) {
 	t.Cleanup(func() { observeEvery = old })
 
 	dev := demo.NewDevice("pixel", "Pixel 9", driver.Android)
-	pol := policy.Default()
+	pol := askingPayments()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}
@@ -367,4 +367,10 @@ func TestPlatformName(t *testing.T) {
 			t.Errorf("platformName(%+v) = %q, want %q", c.info, got, c.want)
 		}
 	}
+}
+
+func askingPayments() *policy.Engine {
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	return policy.New(f, nil)
 }

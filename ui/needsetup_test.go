@@ -14,7 +14,6 @@ import (
 	"github.com/DIYgod/pinky/cmd/pinky/locales"
 	"github.com/DIYgod/pinky/internal/driver"
 	"github.com/DIYgod/pinky/internal/gateway"
-	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/ui/demogw"
 	"github.com/DIYgod/pinky/ui/fakeapi"
 )
@@ -49,7 +48,7 @@ func (p *stepsProvider) list(infos ...driver.Info) {
 // newStepsApp is the client on the real gateway, with phones from ps.
 func newStepsApp(t *testing.T, ps ...driver.Provider) *gwApp {
 	t.Helper()
-	g, err := gateway.New(gateway.Options{Providers: ps, Policy: policy.Default(), TrustNewAgents: true,
+	g, err := gateway.New(gateway.Options{Providers: ps, Policy: askingPayments(), TrustNewAgents: true,
 		DiscoverEvery: 20 * time.Millisecond, NoScreenshots: true})
 	if err != nil {
 		t.Fatal(err)

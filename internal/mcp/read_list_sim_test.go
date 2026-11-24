@@ -73,7 +73,7 @@ p{margin:0;color:#444}
 	defer dev.Close()
 	g, err := gateway.New(gateway.Options{
 		Providers:      []driver.Provider{&readListSimProvider{dev: dev}},
-		Policy:         policy.Default(),
+		Policy:         askingPayments(),
 		TrustNewAgents: true,
 		NoScreenshots:  true,
 		DataDir:        t.TempDir(),

@@ -9,6 +9,8 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"regexp"
 	"slices"
 	"strconv"
@@ -213,9 +215,15 @@ func newHarnessLog(t *testing.T, log *slog.Logger) *harness {
 	h := &harness{dev: dev, api: &model{}}
 	srv := httptest.NewServer(h.api)
 	h.url = srv.URL
+	dir := t.TempDir()
+	rules := append(policy.DefaultRulesYAML(), []byte("\nguards:\n  payments: ask\n")...)
+	if err := os.WriteFile(filepath.Join(dir, "rules.yaml"), rules, 0o600); err != nil {
+		t.Fatal(err)
+	}
 	c, err := New(Options{
 		ID:      "iphone",
 		Self:    policy.IPhoneApp,
+		DataDir: dir,
 		Version: "test",
 		Gateway: gateway.Options{SettleMax: 200 * time.Millisecond, PollInterval: 5 * time.Millisecond,
 			MaxBlock: 50 * time.Millisecond, DiscoverEvery: 20 * time.Millisecond},
@@ -230,6 +238,9 @@ func newHarnessLog(t *testing.T, log *slog.Logger) *harness {
 		srv.Close()
 	})
 	h.core = c
+	if err := c.Gateway().Policy().SetPreset(policy.PresetCommits); err != nil {
+		t.Fatal(err)
+	}
 	pol := c.Gateway().Policy()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)

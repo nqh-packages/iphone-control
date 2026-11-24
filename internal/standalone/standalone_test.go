@@ -152,11 +152,21 @@ func newHarness(t *testing.T, tune ...func(*Options)) *harness {
 	for _, f := range tune {
 		f(&o)
 	}
+	if o.DataDir == "" {
+		o.DataDir = t.TempDir()
+		rules := append(policy.DefaultRulesYAML(), []byte("\nguards:\n  payments: ask\n")...)
+		if err := os.WriteFile(filepath.Join(o.DataDir, "rules.yaml"), rules, 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
 	c, err := New(o)
 	if err != nil {
 		t.Fatal(err)
 	}
 	h.core = c
+	if err := c.G.Policy().SetPreset(o.Preset); err != nil {
+		t.Fatal(err)
+	}
 	pol := c.G.Policy()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)

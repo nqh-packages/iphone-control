@@ -28,7 +28,7 @@ type harness struct {
 func newHarness(t *testing.T, opts ...func(*gateway.Options)) *harness {
 	t.Helper()
 	dev := demo.NewDevice("pixel", "Pixel 9", driver.Android)
-	pol := policy.Default()
+	pol := askingPayments()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}
@@ -721,4 +721,10 @@ func TestCredentialReference(t *testing.T) {
 		}
 		text, _ = c.call(t, "phone_observe", nil)
 	}
+}
+
+func askingPayments() *policy.Engine {
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	return policy.New(f, nil)
 }

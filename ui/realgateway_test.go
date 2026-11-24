@@ -19,7 +19,7 @@ import (
 // Allow in the right panel lets the tap go through.
 func TestApprovePaymentWithRealGateway(t *testing.T) {
 	providers, _ := demo.World()
-	pol := policy.Default()
+	pol := askingPayments()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}
@@ -111,4 +111,10 @@ func TestApprovePaymentWithRealGateway(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 	t.Fatalf("the payment was not decided; needs: %d", len(g.Needs()))
+}
+
+func askingPayments() *policy.Engine {
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	return policy.New(f, nil)
 }

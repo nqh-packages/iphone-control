@@ -165,7 +165,7 @@ type harness struct {
 func newHarness(t *testing.T, gopts ...func(*gateway.Options)) *harness {
 	t.Helper()
 	dev := demo.NewDevice("pixel", "Pixel 9", driver.Android)
-	pol := policy.Default()
+	pol := askingPayments()
 	for cat, e := range demo.PolicyApps() {
 		pol.AddApps(cat, e)
 	}
@@ -1045,4 +1045,10 @@ func TestNormalize(t *testing.T) {
 
 func anthropicUser(r result) anMessage {
 	return anMessage{Role: "user", Content: []any{toolResult(r)}}
+}
+
+func askingPayments() *policy.Engine {
+	f := policy.DefaultFile()
+	f.Guards = map[string]string{policy.GuardPayments: policy.GuardAsk}
+	return policy.New(f, nil)
 }

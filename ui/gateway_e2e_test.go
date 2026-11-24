@@ -18,6 +18,7 @@ import (
 
 	"github.com/DIYgod/pinky/internal/demo"
 	"github.com/DIYgod/pinky/internal/gateway"
+	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/internal/video"
 	"github.com/DIYgod/pinky/ui/demogw"
 )
@@ -39,6 +40,13 @@ func newGatewayApp(t *testing.T, trust bool, opts ...func(*demogw.Options)) *gwA
 	o := demogw.Options{DataDir: t.TempDir(), TrustNewAgents: trust, MaxBlock: time.Second}
 	for _, f := range opts {
 		f(&o)
+	}
+	if o.ConfigDir == "" {
+		o.ConfigDir = t.TempDir()
+		rules := append(policy.DefaultRulesYAML(), []byte("\nguards:\n  payments: ask\n")...)
+		if err := os.WriteFile(filepath.Join(o.ConfigDir, "rules.yaml"), rules, 0o600); err != nil {
+			t.Fatal(err)
+		}
 	}
 	w, err := demogw.New(o)
 	if err != nil {
