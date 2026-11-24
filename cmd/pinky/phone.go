@@ -78,6 +78,7 @@ func phoneUsage(w io.Writer) {
   pinkyctl phone tools [--json] [name]
   pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
   pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] (<file> | -e '<sh>' | -)
+  pinkyctl phone pin (set | check | delete) [-device D]
 
 status prints one JSON line: free, device, holder, task, reserved_for,
 reserved_left_s, waiting, link, health. tools lists the gateway's phone_*
@@ -85,6 +86,9 @@ tools as it serves them now. call makes one tool call (the tool name with or
 without phone_): it takes the phone, calls, and releases. run holds one session
 and one lease for the script's whole life; phone call inside it goes through
 that session.
+
+pin saves the passcode the daemon enters when a call finds the phone locked
+(PINKY_AUTO_UNLOCK=1); run pinkyctl phone pin help.
 
 The agent is named -as, else $IPHONE_LEASE_HOLDER, else "Pinky CLI". -wait is
 how many seconds to queue for the phone (default 60).
@@ -111,6 +115,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneCallCmd(args[1:], pio)
 	case "run":
 		return phoneRunCmd(args[1:], pio)
+	case "pin":
+		return phonePinCmd(args[1:], pio)
 	case "help", "-h", "--help", "-help":
 		phoneUsage(pio.out)
 		return phoneExitOK

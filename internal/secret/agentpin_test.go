@@ -3,6 +3,7 @@ package secret
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 )
@@ -168,5 +169,32 @@ func TestAgentPINDeleteForgetsTheRefusal(t *testing.T) {
 func TestAgentPINServiceIsNotPinkyAppsService(t *testing.T) {
 	if AgentService == Service {
 		t.Fatal("the daemon's passcodes share Pinky.app's keychain service")
+	}
+}
+
+func TestAgentPINFixLinesNameTheRightStep(t *testing.T) {
+	rows := []struct {
+		err  error
+		want string
+	}{
+		{ErrNotFound, "pinkyctl phone pin set -device se"},
+		{ErrKeychainLocked, "login keychain"},
+		{ErrKeychainDenied, "this build of pinky"},
+		{ErrPINRefused, "check the passcode on the phone"},
+		{ErrPINBackoff, "again in a minute"},
+	}
+	seen := map[string]bool{}
+	for _, r := range rows {
+		got := PINFix(r.err, "se")
+		if !strings.Contains(got, r.want) {
+			t.Errorf("PINFix(%v) = %q, want it to contain %q", r.err, got, r.want)
+		}
+		if seen[got] {
+			t.Errorf("two errors share the fix %q", got)
+		}
+		seen[got] = true
+	}
+	if PINFix(errors.New("other"), "se") != "" {
+		t.Error("an unknown error got a fix")
 	}
 }

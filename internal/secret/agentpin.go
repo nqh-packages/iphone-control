@@ -176,3 +176,23 @@ func (p *AgentPINs) Entered(deviceID string) {
 	delete(p.next, deviceID)
 	p.mu.Unlock()
 }
+
+// PINFix says how to get past one of AgentPINs' errors for a device, in the
+// words of a fix: line. It is empty for an error it knows no fix for.
+func PINFix(err error, deviceID string) string {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return "the owner runs `pinkyctl phone pin set -device " + deviceID + "`"
+	case errors.Is(err, ErrKeychainLocked):
+		return "unlock the Mac's login keychain: log in on the Mac, or turn off Lock after sleep for it"
+	case errors.Is(err, ErrKeychainDenied):
+		return "the owner runs `pinkyctl phone pin set -device " + deviceID + "` with this build of pinky"
+	case errors.Is(err, ErrPINRefused):
+		return "check the passcode on the phone, then the owner runs `pinkyctl phone pin set -device " + deviceID + "`"
+	case errors.Is(err, ErrPINBackoff):
+		return "call again in a minute"
+	case errors.Is(err, ErrUnsupported):
+		return "use a Mac: only its keychain keeps the passcode"
+	}
+	return ""
+}
