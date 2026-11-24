@@ -75,3 +75,11 @@ func (c *wdaClient) dialFailed(err error, retried bool) error {
 	}
 	return fmt.Errorf("%w; fix: %s; if it stays, restart the daemon or reinstall the helper (pinky doctor)", err, tried)
 }
+
+const dialFailsGone = 3
+
+func (c *wdaClient) dialFails() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.fails
+}

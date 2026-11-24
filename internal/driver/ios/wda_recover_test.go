@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+
+	"github.com/DIYgod/pinky/internal/driver"
 )
 
 func recoverServer(t *testing.T, sessions *atomic.Int32) *httptest.Server {
@@ -104,5 +106,19 @@ func TestWDARepeatedFailureTriesOtherTransportOnce(t *testing.T) {
 	}
 	if other.Load() != 1 {
 		t.Fatalf("other transport lookups = %d, want 1", other.Load())
+	}
+}
+
+func TestGoneAfterRepeatedDialFailsWhileTheRunnerLives(t *testing.T) {
+	d := &WDADevice{c: newWDAURL("http://127.0.0.1:1", ""), run: &wdaRun{done: make(chan struct{})}}
+	err := &wdaDialError{errors.New("connect to port 8100 on the phone")}
+	if got := d.gone(err); errors.Is(got, driver.ErrOffline) {
+		t.Fatalf("offline after no failures: %v", got)
+	}
+	for i := 0; i < dialFailsGone; i++ {
+		d.c.recoverDial(context.Background())
+	}
+	if got := d.gone(err); !errors.Is(got, driver.ErrOffline) {
+		t.Fatalf("not offline after %d dial failures: %v", dialFailsGone, got)
 	}
 }

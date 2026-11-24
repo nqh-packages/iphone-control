@@ -137,7 +137,7 @@ func (d *WDADevice) gone(err error) error {
 		return err
 	}
 	var de *wdaDialError
-	if d.ended() || (d.run == nil && errors.As(err, &de)) {
+	if d.ended() || (errors.As(err, &de) && (d.run == nil || d.c.dialFails() >= dialFailsGone)) {
 		return fmt.Errorf("%v: %w", err, driver.ErrOffline)
 	}
 	return err
