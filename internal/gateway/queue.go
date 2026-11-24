@@ -249,5 +249,18 @@ func (g *Gateway) reserveLocked(d *device, agent string) {
 
 // leaseViewLocked is d's LeaseView, with dead tickets left out. The caller holds g.mu.
 func (g *Gateway) leaseViewLocked(d *device) LeaseView {
-	return LeaseView{}
+	var v LeaseView
+	if l := d.lease; l != nil {
+		v.Holder, v.Task = l.session.agent.Name, l.task.title
+	}
+	now := time.Now()
+	if d.line.reserved != "" && now.Before(d.line.until) {
+		v.ReservedFor, v.ReservedUntil = d.line.reserved, d.line.until
+	}
+	for _, t := range d.line.tickets {
+		if !t.session.closed && !now.After(t.deadline) && (t.waiting || now.Sub(t.lastCall) <= ticketGrace) {
+			v.Waiting = append(v.Waiting, t.session.agent.Name)
+		}
+	}
+	return v
 }

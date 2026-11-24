@@ -289,3 +289,24 @@ func TestPauseEndsWaits(t *testing.T) {
 		queueFail(t, "pausing the phone should answer waiters device_paused: %+v", res)
 	}
 }
+
+func TestLeaseView(t *testing.T) {
+	g, _ := newTestGateway(t, withReserve(time.Minute))
+	if v := g.Devices()[0].Lease; v.Holder != "" || v.ReservedFor != "" || len(v.Waiting) != 0 {
+		queueFail(t, "a free phone should have an empty view: %+v", v)
+	}
+	a := connectAs(t, g, "worker-a", "first task")
+	connectWaiting(named(t, g, "worker-b"), "b", 5*time.Second)
+	waitLine(t, g, 1)
+	connectWaiting(named(t, g, "worker-c"), "c", 5*time.Second)
+	waitLine(t, g, 2)
+	v := g.Devices()[0].Lease
+	if v.Holder != "worker-a" || v.Task != "first task" || strings.Join(v.Waiting, ",") != "worker-b,worker-c" {
+		queueFail(t, "view while held: %+v", v)
+	}
+	releaseAll(t, a)
+	v = g.Devices()[0].Lease
+	if v.Holder != "" || v.ReservedFor != "worker-a" || v.ReservedUntil.IsZero() {
+		queueFail(t, "view after release: %+v", v)
+	}
+}
