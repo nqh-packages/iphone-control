@@ -231,8 +231,12 @@ func (e *Engine) Evaluate(in Input) Verdict {
 	v := Verdict{Decision: Allow, Kinds: kinds}
 	var asks []string
 	lift := in.AllowBlocked && !contains(cats, CatPasswords)
+	var decider Rule
 	for _, r := range e.rulesLocked() {
 		if !r.matches(app, cats, kinds, in) {
+			continue
+		}
+		if r.FreeOK && freeItem(in) {
 			continue
 		}
 		if (lift || e.secretLiftLocked(app, r)) && r.Decision == Deny && r.Match.appLevel() {
@@ -243,10 +247,14 @@ func (e *Engine) Evaluate(in Input) Verdict {
 		}
 		if r.Decision > v.Decision || (v.Rule == "" && r.Decision == v.Decision && r.Decision != Allow) {
 			v.Decision, v.Rule = r.Decision, r.Name
+			decider = r
 		}
 	}
 	if v.Rule != "" {
 		v.Reason = reason(v, app)
+		if decider.Guard != "" && v.Decision == Deny {
+			v.Reason = guardRefusal(decider.Guard)
+		}
 	}
 	if taskAsk {
 		asks = append(asks, RuleTaskApps)

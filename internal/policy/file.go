@@ -35,6 +35,11 @@ type File struct {
 	// agents cannot.
 	CredentialApps []string `yaml:"credential_apps,omitempty"`
 	Rules          []Rule   `yaml:"rules"`
+	// Guards sets what happens at each gate no person is there to answer:
+	// payments, erase, delete_account, sign_out and passcode_off, each
+	// allow, refuse (an instant denial) or ask (the approval card). Unset
+	// gates refuse; payments allow a free item and refuse a priced one.
+	Guards map[string]string `yaml:"guards,omitempty"`
 	// AlwaysAllow holds the person's "Always allow" answers to approvals
 	// (see Exemption), oldest first.
 	AlwaysAllow []Exemption `yaml:"always_allow,omitempty"`
@@ -62,6 +67,9 @@ func ParseFile(data []byte) (File, error) {
 		if err := checkRule(i, r); err != nil {
 			return File{}, err
 		}
+	}
+	if err := checkGuards(f.Guards); err != nil {
+		return File{}, err
 	}
 	if err := checkExemptions(&f); err != nil {
 		return File{}, err

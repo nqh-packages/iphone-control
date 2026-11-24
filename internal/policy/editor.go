@@ -37,7 +37,7 @@ func (e *Engine) FileRules() []Rule {
 func (e *Engine) BuiltInRules() []Rule {
 	e.mu.RLock()
 	defer e.mu.RUnlock()
-	return cloneRules(append(append([]Rule(nil), presetRules(e.presetLocked())...), builtinRules...))
+	return cloneRules(append(append([]Rule(nil), presetRulesFor(e.presetLocked(), e.file.Guards)...), builtinRules...))
 }
 
 // Errors from SetFileRules, besides the checks ParseFile makes.

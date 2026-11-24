@@ -70,7 +70,7 @@ func TestUnsafeLinksAreRefused(t *testing.T) {
 		"itms-services://?action=download-manifest&url=https://x/m.plist",
 	}
 	browser := screen.App{ID: "com.android.chrome", Name: "Chrome"}
-	for _, e := range []*Engine{commitsEngine(t), Default()} {
+	for _, e := range []*Engine{commitsEngine(t), askingDefault()} {
 		for _, link := range links {
 			in := linkInput(link, browser)
 			in.AllowBlocked = true
@@ -136,7 +136,7 @@ func TestLinksMeetTheRulesOfATap(t *testing.T) {
 		}(), Ask, Ask, "Payments", "Payments", Payment},
 		{"opened by a bank", linkInput("https://chase.com/pay", chase), Deny, Deny, "Finance apps", "Finance apps", OpenURL},
 	}
-	for _, e := range []*Engine{commitsEngine(t), Default()} {
+	for _, e := range []*Engine{commitsEngine(t), askingDefault()} {
 		for _, c := range cases {
 			want, rule := c.want1, c.rule1
 			if e.Preset() == PresetPayments {

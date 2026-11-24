@@ -22,6 +22,7 @@ func secretEngine(t *testing.T, listed ...string) *Engine {
 	t.Helper()
 	f := DefaultFile()
 	f.CredentialApps = listed
+	f.Guards = askAll()
 	return New(f, nil)
 }
 

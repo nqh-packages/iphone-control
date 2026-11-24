@@ -818,6 +818,12 @@ An agent that writes a bug report or a pull request can keep what it saw as file
 - An MCP cancellation of the blocked call, a closed session, Stop and Take over all withdraw the panel without acting.
 - Only the client's `Decide` answers approvals. No tool can.
 
+## Gates with no one to answer
+
+- Five gates never wait for a person: `payments`, `erase` (Erase All Content and Settings), `delete_account`, `sign_out` and `passcode_off` (Turn Passcode Off). The owner sets each once in rules.yaml under `guards:`, with `allow`, `refuse` (an instant `blocked_by_policy` denial) or `ask` (the approval flow above). Agents cannot edit the file.
+- Unset gates refuse. `payments` refuses an action that moves money, and allows a free item: a screen whose button says Get, Free or $0 and shows no nonzero price. When the screen is unclear, it refuses.
+- A refusal names the gate and says how to lift it: `the owner can allow it with guards: erase: allow in rules.yaml`.
+
 ## Progress notifications
 
 Sent only when the request carries `_meta.progressToken`: while waiting for an approval or handoff (at the start and every 5 s), for `phone_observe` with `wait_ms`, for `phone_read_list` after each screen, and for `phone_wait_for` (every 5 s). `progress` and `total` are seconds.

@@ -97,6 +97,7 @@ always_allow:
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.Guards = askAll()
 	e := New(f, nil)
 	if v := e.Evaluate(tap(dinely, pay)); v.Decision != Allow {
 		t.Fatalf("exempted payment: %+v", v)
@@ -173,6 +174,7 @@ always_allow:
 	if err != nil {
 		t.Fatal(err)
 	}
+	f.Guards = askAll()
 	e := New(f, nil)
 	v := e.Evaluate(tap(dinely, pay))
 	if v.Decision != Ask || v.Rule != "Big orders" || !reflect.DeepEqual(v.Asks, []string{"Big orders"}) ||
@@ -196,14 +198,14 @@ func TestExemptionOrderDoesNotMatter(t *testing.T) {
 	commits := Exemption{Rule: "Commits", With: StringList{"Big orders"}, App: dinely.ID}
 	var got []Verdict
 	for _, order := range [][]Exemption{{payments, commits}, {commits, payments}} {
-		e := New(File{Preset: &one, Rules: []Rule{big}, AlwaysAllow: order}, nil)
+		e := New(File{Preset: &one, Guards: askAll(), Rules: []Rule{big}, AlwaysAllow: order}, nil)
 		got = append(got, e.Evaluate(tap(dinely, pay)))
 	}
 	if got[0].Decision != Allow || got[1].Decision != Allow {
 		t.Fatalf("verdicts %+v", got)
 	}
 	// Commits alone does not lift the payment.
-	e := New(File{Preset: &one, Rules: []Rule{big}, AlwaysAllow: []Exemption{commits}}, nil)
+	e := New(File{Preset: &one, Guards: askAll(), Rules: []Rule{big}, AlwaysAllow: []Exemption{commits}}, nil)
 	if v := e.Evaluate(tap(dinely, pay)); v.Decision != Ask || v.Rule != "Payments" {
 		t.Fatalf("payment with only Commits always allowed: %+v", v)
 	}
@@ -252,6 +254,7 @@ func TestExemptionsSavedAndTakenBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.file.Guards = askAll()
 	// Messages and Commits ask only with preset 1.
 	if err := e.SetPreset(PresetCommits); err != nil {
 		t.Fatal(err)
@@ -286,6 +289,7 @@ func TestExemptionsSavedAndTakenBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.file.Guards = askAll()
 	if got := e.Exemptions(); len(got) != 2 || !reflect.DeepEqual(got[0], x) || got[1].Rule != "Messages" {
 		t.Fatalf("exemptions after a restart: %+v", got)
 	}

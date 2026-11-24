@@ -12,6 +12,16 @@
 #   3  every action asks
 #   0  no preset: only the rules below
 #
+# guards: what happens at the gates nobody is there to answer. Keys: payments,
+# erase, delete_account, sign_out, passcode_off. Values: allow, refuse (an
+# instant denial) or ask (the approval card, which waits 60 seconds). Unset,
+# every gate refuses, except payments, which allows a free item (Get, Free,
+# $0) and refuses one with a price. Example:
+#
+#   guards:
+#     sign_out: ask
+#     payments: allow
+#
 # match fields (all that are set must match; within a field, any value does):
 #   app:      package names, bundle ids or display names
 #   category: categories from the app table (finance, passwords, messaging,

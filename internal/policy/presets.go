@@ -48,7 +48,7 @@ func ask(name string, actions ...string) Rule {
 // commitRules are PresetCommits' rules, specific ones first so they name
 // the result.
 var commitRules = []Rule{
-	ask("Payments", string(Payment)),
+	ask(RulePayments, string(Payment)),
 	ask("Messages", string(SendMessage)),
 	ask("Commits", string(Commit)),
 	ask("Installs and links", string(InstallApp), string(OpenURL)),
@@ -56,48 +56,30 @@ var commitRules = []Rule{
 	ask("Settings changes", string(ChangeSetting)),
 }
 
-// RuleEraseDevice, RuleAppleAccount and RulePasscode name the guard rules
-// below on the approval card.
-const (
-	RuleEraseDevice  = "Erase this iPhone"
-	RuleAppleAccount = "Apple Account"
-	RulePasscode     = "Passcode"
-)
-
-// settingsApp is the iOS Settings app, the only app the guard rules cover.
-const settingsApp = "com.apple.Preferences"
-
-func settingsAsk(name string, labels ...string) Rule {
-	return Rule{Name: name, Match: Match{App: StringList{settingsApp}, Label: StringList(labels)}, Decision: Ask}
-}
-
-// guardRules ask before the few things in Settings that cannot be undone
-// or lock the person out: erasing the phone, signing out of or deleting
-// the Apple Account, and removing the passcode. Every preset except none
-// carries them, so they reach a rules file written by any earlier version.
-var guardRules = []Rule{
-	settingsAsk(RuleEraseDevice, "Erase All Content and Settings", "Erase iPhone"),
-	settingsAsk(RuleAppleAccount, "Sign Out", "Delete Account"),
-	settingsAsk(RulePasscode, "Turn Passcode Off"),
-}
-
-// withGuards puts guardRules after the first rule, payments, and before the
-// general ones so they name the result.
-func withGuards(rules []Rule) []Rule {
-	out := append([]Rule(nil), rules[:1]...)
-	out = append(out, guardRules...)
+// withGuards puts the guard gates after the first rule, payments, and
+// before the general ones so they name the result.
+func withGuards(rules []Rule, g map[string]string) []Rule {
+	var out []Rule
+	if r, ok := paymentsRule(g); ok {
+		out = append(out, r)
+	}
+	out = append(out, settingsGateRules(g)...)
 	return append(out, rules[1:]...)
 }
 
-// presetRules returns the rules a preset adds.
-func presetRules(p Preset) []Rule {
+// presetRules returns the rules a preset adds, with every gate at its
+// default.
+func presetRules(p Preset) []Rule { return presetRulesFor(p, nil) }
+
+// presetRulesFor returns the rules a preset adds, the gates set by guards.
+func presetRulesFor(p Preset, g map[string]string) []Rule {
 	switch p {
 	case PresetCommits:
-		return withGuards(commitRules)
+		return withGuards(commitRules, g)
 	case PresetPayments:
-		return withGuards(commitRules[:1])
+		return withGuards(commitRules[:1], g)
 	case PresetEvery:
-		return append(withGuards(commitRules), ask(RuleEvery, string(OpTap), string(OpType), string(OpSwipe), string(OpKey), string(OpLaunch), string(OpStop)))
+		return append(withGuards(commitRules, g), ask(RuleEvery, string(OpTap), string(OpType), string(OpSwipe), string(OpKey), string(OpLaunch), string(OpStop)))
 	}
 	return nil
 }
@@ -110,7 +92,7 @@ var builtinRules = []Rule{
 // rulesLocked returns every rule in evaluation order: the preset's, then
 // the file's, then the built-in ones.
 func (e *Engine) rulesLocked() []Rule {
-	out := append([]Rule(nil), presetRules(e.presetLocked())...)
+	out := append([]Rule(nil), presetRulesFor(e.presetLocked(), e.file.Guards)...)
 	out = append(out, e.file.Rules...)
 	return append(out, builtinRules...)
 }

@@ -152,7 +152,7 @@ func TestHandEditSurvivesSettings(t *testing.T) {
 	}
 
 	// A rule added by hand, then Hide codes.
-	handEdit(t, rules, "preset: 2\nmask_codes: false\nrules:\n"+financeRule+noDeleting+chatterAsks+
+	handEdit(t, rules, "preset: 2\nmask_codes: false\nguards: {payments: ask}\nrules:\n"+financeRule+noDeleting+chatterAsks+
 		"always_allow:\n"+messagesInWhatsApp)
 	if err := e.SetHideCodes(true); err != nil {
 		t.Fatal(err)
@@ -160,7 +160,7 @@ func TestHandEditSurvivesSettings(t *testing.T) {
 	fileHas(t, rules, "SetHideCodes", "mask_codes: true", "preset: 2", "name: Chatter asks", "rule: Messages")
 
 	// The Always allow taken out by hand, then one from an approval.
-	handEdit(t, rules, "preset: 2\nmask_codes: true\nrules:\n"+financeRule+noDeleting+chatterAsks)
+	handEdit(t, rules, "preset: 2\nmask_codes: true\nguards: {payments: ask}\nrules:\n"+financeRule+noDeleting+chatterAsks)
 	v := e.Evaluate(tap(dinely, pay))
 	if v.Decision != Ask || v.Rule != "Payments" {
 		t.Fatalf("payment: %+v", v)

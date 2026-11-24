@@ -20,6 +20,7 @@ func TestEditRules(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	e.file.Guards = askAll()
 	// Commits ask only with preset 1.
 	if err := e.SetPreset(PresetCommits); err != nil {
 		t.Fatal(err)
@@ -89,7 +90,7 @@ func TestEditRules(t *testing.T) {
 }
 
 func TestEditRulesChecks(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	before := e.FileRules()
 	ok := Rule{Name: "Chatter", Match: Match{App: StringList{"Chatter"}}, Decision: Ask}
 	bad := map[string][]Rule{
@@ -134,7 +135,7 @@ func TestEditRulesChecks(t *testing.T) {
 func TestEditRulesDropsTheirAlwaysAllow(t *testing.T) {
 	one := int(PresetCommits)
 	big := Rule{Name: "Big orders", Match: Match{Label: StringList{"place order"}}, Decision: Ask}
-	e := New(File{Preset: &one, Rules: []Rule{big}, AlwaysAllow: []Exemption{
+	e := New(File{Preset: &one, Guards: askAll(), Rules: []Rule{big}, AlwaysAllow: []Exemption{
 		{Rule: "Big orders", App: dinely.ID},
 		{Rule: "Payments", With: StringList{"Commits", "Big orders"}, App: dinely.ID},
 		{Rule: "Messages", App: chatter.ID},
@@ -160,7 +161,7 @@ func TestEditRulesDropsTheirAlwaysAllow(t *testing.T) {
 }
 
 func TestBuiltInRules(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	names := func() []string {
 		var out []string
 		for _, r := range e.BuiltInRules() {
@@ -168,20 +169,20 @@ func TestBuiltInRules(t *testing.T) {
 		}
 		return out
 	}
-	if got := names(); !reflect.DeepEqual(got, []string{"Payments", RuleEraseDevice, RuleAppleAccount, RulePasscode, RuleBlocked}) {
+	if got := names(); !reflect.DeepEqual(got, []string{"Payments", RuleEraseDevice, RuleDeleteAccount, RuleSignOut, RulePasscode, RuleBlocked}) {
 		t.Fatalf("built in with the default, preset 2: %q", got)
 	}
 	if err := e.SetPreset(PresetCommits); err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"Payments", RuleEraseDevice, RuleAppleAccount, RulePasscode, "Messages", "Commits", "Installs and links", "Calls", "Settings changes", RuleBlocked}
+	want := []string{"Payments", RuleEraseDevice, RuleDeleteAccount, RuleSignOut, RulePasscode, "Messages", "Commits", "Installs and links", "Calls", "Settings changes", RuleBlocked}
 	if got := names(); !reflect.DeepEqual(got, want) {
 		t.Fatalf("built in with preset 1: %q", got)
 	}
 	if err := e.SetPreset(PresetEvery); err != nil {
 		t.Fatal(err)
 	}
-	if got := names(); len(got) != 11 || got[9] != RuleEvery {
+	if got := names(); len(got) != 12 || got[10] != RuleEvery {
 		t.Fatalf("built in with preset 3: %q", got)
 	}
 	// Copies: changing them changes nothing.

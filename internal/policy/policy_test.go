@@ -42,11 +42,7 @@ func tap(app screen.App, label string) Input {
 // before payments only.
 func commitsEngine(t testing.TB) *Engine {
 	t.Helper()
-	e := Default()
-	if err := e.SetPreset(PresetCommits); err != nil {
-		t.Fatal(err)
-	}
-	return e
+	return guardedEngine(t, PresetCommits, askAll())
 }
 
 func TestCommitDetection(t *testing.T) {
@@ -113,7 +109,7 @@ func TestDefaultRules(t *testing.T) {
 		{"dialog ok", Input{Op: OpTap, App: dinely, Target: button("OK"), Screen: &screen.Screen{Elements: []screen.Element{{Role: screen.RoleText, Label: "Delete this message?"}, *button("OK")}}}, Ask, "Commits", Commit},
 		{"plain ok", Input{Op: OpTap, App: dinely, Target: button("OK"), Screen: &screen.Screen{Elements: []screen.Element{{Role: screen.RoleText, Label: "Saved"}}}}, Allow, "", ""},
 	}
-	for _, e := range []*Engine{commitsEngine(t), Default()} {
+	for _, e := range []*Engine{commitsEngine(t), askingDefault()} {
 		for _, c := range cases {
 			want, rule := c.want, c.rule
 			if e.Preset() == PresetPayments && want == Ask && rule != "Payments" {
@@ -147,7 +143,7 @@ func TestBlockedApps(t *testing.T) {
 }
 
 func TestReadOnly(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	e.SetReadOnly("dev1", true)
 	v := e.Evaluate(Input{Op: OpTap, Device: "dev1", App: dinely, Target: button("Pay $3")})
 	if v.Decision != Deny || v.Rule != RuleReadOnly {
@@ -355,6 +351,7 @@ func TestPresets(t *testing.T) {
 	if e.Preset() != PresetPayments {
 		t.Fatalf("default preset %d", e.Preset())
 	}
+	e.file.Guards = askAll()
 	send := Input{Op: OpType, App: whatsapp, Text: "hi", Submit: true, Target: &screen.Element{Role: screen.RoleInput, Label: "Message"}}
 
 	// Payments only, the default.
@@ -440,7 +437,7 @@ func TestLegacyRulesFile(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e.Preset() != PresetCommits || len(e.Rules()) != len(commitRules)+len(guardRules)+2+len(builtinRules) {
+	if e.Preset() != PresetCommits || len(e.Rules()) != len(commitRules)+len(settingsGates)+2+len(builtinRules) {
 		t.Fatalf("migrated: preset %d, %d rules", e.Preset(), len(e.Rules()))
 	}
 	// A hand-edited file without the Commits rule keeps exactly its rules.

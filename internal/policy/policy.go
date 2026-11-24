@@ -181,6 +181,10 @@ type Rule struct {
 	Name     string   `yaml:"name"`
 	Match    Match    `yaml:"match"`
 	Decision Decision `yaml:"decision"`
+	// Guard names the gate (guards in rules.yaml) a preset rule enforces;
+	// FreeOK lets a free item through it. Neither is in the rules file.
+	Guard  string `yaml:"-"`
+	FreeOK bool   `yaml:"-"`
 }
 
 // Match selects actions. Every field that is set must match; within a field,

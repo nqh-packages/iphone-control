@@ -21,7 +21,7 @@ func tapOn(app screen.App, e screen.Element, others ...screen.Element) Input {
 // which the default (payments only) asks about, with or without an amount
 // on the screen (field test bug 1).
 func TestMoneyMovingButtonsAskByDefault(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	payments := []string{
 		"Sell", "Sell all", "Swap", "Confirm swap", "Slide to swap", "Trade", "Repay", "Borrow", "Stake",
 		"Unstake", "Bridge", "Withdraw", "Transfer", "Buy", "Pay", "Deposit", "Place order", "Top up",
@@ -51,7 +51,7 @@ func TestMoneyMovingButtonsAskByDefault(t *testing.T) {
 	// nothing, whatever the preset.
 	for _, l := range []string{"Trade", "Swap", "Buy", "Sell"} {
 		tab := screen.Element{Role: screen.RoleTab, Label: l}
-		for _, e := range []*Engine{Default(), commitsEngine(t)} {
+		for _, e := range []*Engine{askingDefault(), commitsEngine(t)} {
 			if v := e.Evaluate(tapOn(dex, tab)); v.Decision != Allow || len(v.Kinds) != 0 {
 				t.Errorf("tab %q, preset %d: %+v", l, e.Preset(), v)
 			}
@@ -88,7 +88,7 @@ func TestDeleteWords(t *testing.T) {
 		if v := commits.Evaluate(tapOn(dex, *button(l))); v.Decision != Ask || v.Rule != "Commits" {
 			t.Errorf("%q with preset 1: %+v", l, v)
 		}
-		if v := Default().Evaluate(tapOn(dex, *button(l))); v.Decision != Allow || !v.Has(Commit) {
+		if v := askingDefault().Evaluate(tapOn(dex, *button(l))); v.Decision != Allow || !v.Has(Commit) {
 			t.Errorf("%q by default: %+v", l, v)
 		}
 	}
@@ -123,7 +123,7 @@ func TestOCRText(t *testing.T) {
 		}
 	}
 	// By default the payments among them ask.
-	if v := Default().Evaluate(tapOn(dex, ocr("账单 还款 分期还款 去分期"))); v.Decision != Ask || v.Rule != "Payments" {
+	if v := askingDefault().Evaluate(tapOn(dex, ocr("账单 还款 分期还款 去分期"))); v.Decision != Ask || v.Rule != "Payments" {
 		t.Fatalf("OCR repayment by default: %+v", v)
 	}
 }
@@ -131,7 +131,7 @@ func TestOCRText(t *testing.T) {
 // TestRedPacketsReceivedAskNothing: opening or claiming a red packet someone
 // sent brings money in, and a page of past red packets moves none.
 func TestRedPacketsReceivedAskNothing(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	for _, l := range []string{"领红包", "开红包", "红包记录", "紅包紀錄"} {
 		if v := e.Evaluate(tapOn(dex, *button(l))); v.Decision != Allow || v.Has(Payment) {
 			t.Errorf("%q: %+v", l, v)
@@ -144,7 +144,7 @@ func TestRedPacketsReceivedAskNothing(t *testing.T) {
 // the same long press inside an app, and a tap on the icon, are judged as
 // before.
 func TestHomeScreenLongPressIsNoPayment(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	homes := []screen.App{
 		{Name: "Home Screen", ID: "com.apple.springboard"},
 		{Name: "Pixel Launcher", ID: "com.google.android.apps.nexuslauncher"},

@@ -46,7 +46,7 @@ func TestChatSendIsNoPayment(t *testing.T) {
 				Bounds: screen.Rect{X: 40, Y: 100, W: 1000, H: 100}})},
 	}
 	for _, c := range cases {
-		v := Default().Evaluate(c.in)
+		v := askingDefault().Evaluate(c.in)
 		if v.Decision != Allow || !v.Has(Commit) || v.Has(Payment) {
 			t.Errorf("%s by default: %v %q (kinds %v), want a commit that is no payment", c.name, v.Decision, v.Rule, v.Kinds)
 		}
@@ -89,7 +89,7 @@ func TestSendStaysPayment(t *testing.T) {
 			Screen: &screen.Screen{App: wechat, Elements: []screen.Element{history, composer("hi")}}}},
 	}
 	for _, c := range cases {
-		if v := Default().Evaluate(c.in); v.Decision != Ask || v.Rule != "Payments" || !v.Has(Payment) {
+		if v := askingDefault().Evaluate(c.in); v.Decision != Ask || v.Rule != "Payments" || !v.Has(Payment) {
 			t.Errorf("%s: %v %q (kinds %v), want a payment", c.name, v.Decision, v.Rule, v.Kinds)
 		}
 	}
@@ -98,7 +98,7 @@ func TestSendStaysPayment(t *testing.T) {
 	// move money whatever its send button says.
 	in := tapOn(mybank, sendButton("发送"), text("本月账单 ¥1,234.00", 600), composer("能分期吗"))
 	in.AllowBlocked = true
-	if v := Default().Evaluate(in); v.Decision != Ask || v.Rule != "Payments" || !v.Has(Payment) {
+	if v := askingDefault().Evaluate(in); v.Decision != Ask || v.Rule != "Payments" || !v.Has(Payment) {
 		t.Errorf("finance app chat: %v %q (kinds %v), want a payment", v.Decision, v.Rule, v.Kinds)
 	}
 }

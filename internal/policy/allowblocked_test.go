@@ -10,7 +10,7 @@ import (
 // person allowed for a task, and nothing else: payments in it still ask,
 // password managers stay blocked, and read-only mode still holds.
 func TestAllowBlocked(t *testing.T) {
-	e := Default()
+	e := askingDefault()
 	e.AddApps(CatPasswords, CategoryEntries{IDs: []string{"com.example.vault"}})
 	wise := screen.App{ID: "com.transferwise.Transferwise", Name: "Wise"}
 	if _, blocked := e.Blocked(wise); !blocked {
