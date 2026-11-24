@@ -230,3 +230,76 @@ func TestPhonePinKeychainFailuresEachHaveTheirOwnFix(t *testing.T) {
 		t.Fatalf("the two failures share a fix: %v", fixes)
 	}
 }
+
+func TestPhonePinFileTooLongForAPassCodeIsRefusedAndKept(t *testing.T) {
+	e := newPinEnv(t)
+	path := filepath.Join(t.TempDir(), "big")
+	content := bytes.Repeat([]byte("1"), 1<<20)
+	if err := os.WriteFile(path, content, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	code, out, errOut := e.run("", "set", "-file", path)
+	if code != phoneExitUsage || out != "" || !strings.Contains(errOut, "too long") {
+		t.Fatalf("%d %q %q", code, out, errOut)
+	}
+	if b, err := os.ReadFile(path); err != nil || !bytes.Equal(b, content) {
+		t.Fatalf("an oversized file was changed or deleted: %d bytes, %v", len(b), err)
+	}
+}
+
+func TestPhonePinFileAtTheLimitIsRead(t *testing.T) {
+	e := newPinEnv(t)
+	path := filepath.Join(t.TempDir(), "edge")
+	pin := strings.Repeat("a", 64)
+	os.WriteFile(path, []byte(pin+"\r\n"), 0o600)
+	if code, _, errOut := e.run("", "set", "-file", path); code != 0 {
+		t.Fatalf("%d %q", code, errOut)
+	}
+	if got := e.saved(t, "se-id"); got != pin {
+		t.Fatalf("saved %q", got)
+	}
+}
+
+func TestPhonePinSymlinkIsNotFollowedAndStays(t *testing.T) {
+	e := newPinEnv(t)
+	dir := t.TempDir()
+	target, link := filepath.Join(dir, "target"), filepath.Join(dir, "link")
+	os.WriteFile(target, []byte(pinSentinel+"\n"), 0o600)
+	os.Symlink(target, link)
+	if code, _, _ := e.run("", "set", "-file", link); code != phoneExitUsage {
+		t.Fatalf("exit %d", code)
+	}
+	if b, err := os.ReadFile(target); err != nil || string(b) != pinSentinel+"\n" {
+		t.Fatalf("the target changed: %q, %v", b, err)
+	}
+	if _, err := os.Lstat(link); err != nil {
+		t.Fatalf("the symlink was deleted: %v", err)
+	}
+	if got := e.saved(t, "se-id"); got != "" {
+		t.Fatalf("a passcode was read through a symlink: %q", got)
+	}
+}
+
+func TestScrubFileLeavesAPathSwappedForAnotherFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "delivered")
+	os.WriteFile(path, []byte(pinSentinel+"\n"), 0o600)
+	f, err := os.OpenFile(path, os.O_RDWR, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	fi, _ := f.Stat()
+	moved := filepath.Join(dir, "moved")
+	os.Rename(path, moved)
+	os.WriteFile(path, []byte("someone else's file\n"), 0o600)
+	if err := scrubFile(f, fi, path); err == nil {
+		t.Fatal("scrubFile deleted a path that no longer names the opened file")
+	}
+	if b, _ := os.ReadFile(path); string(b) != "someone else's file\n" {
+		t.Fatalf("the swapped-in file changed: %q", b)
+	}
+	if b, _ := os.ReadFile(moved); len(bytes.Trim(b, "\x00")) != 0 {
+		t.Fatalf("the opened file was not zeroed: %q", b)
+	}
+}

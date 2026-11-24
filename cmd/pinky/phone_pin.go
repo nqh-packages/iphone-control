@@ -228,35 +228,44 @@ func readPinLine(r io.Reader) ([]byte, error) {
 	return line, nil
 }
 
+// pinFileMax is the longest file set reads: a 64-character passcode and a
+// CRLF.
+const pinFileMax = 66
+
 // readPinFile reads the file's one line and scrubs it, whatever the line
 // held: the delivered file is the passcode's only copy besides the keychain.
+// It opens the path once, never through a symlink, and works only on what it
+// opened; a file too long to be a passcode is refused and left alone.
 func readPinFile(path string) ([]byte, error) {
-	fi, err := os.Lstat(path)
+	f, err := os.OpenFile(path, os.O_RDWR|pinFileOpenFlags, 0)
+	if err != nil {
+		return nil, errors.New("-file is not a regular file that could be opened")
+	}
+	defer f.Close()
+	fi, err := f.Stat()
 	if err != nil || !fi.Mode().IsRegular() {
 		return nil, errors.New("-file is not a regular file")
 	}
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, errors.New("could not open -file")
+	if fi.Size() > pinFileMax {
+		return nil, errors.New("-file is too long to hold a passcode; it was not read or deleted")
 	}
 	pin, rerr := readPinLine(f)
-	f.Close()
-	if err := scrubFile(path, fi.Size()); err != nil {
+	if err := scrubFile(f, fi, path); err != nil {
 		zero(pin)
 		return nil, errors.New("could not zero and delete -file; it was not used")
 	}
 	return pin, rerr
 }
 
-// scrubFile overwrites a file with zeros and deletes it.
-func scrubFile(path string, size int64) error {
-	f, err := os.OpenFile(path, os.O_WRONLY, 0)
-	if err != nil {
-		return err
-	}
-	_, werr := f.Write(make([]byte, size))
+// scrubFile overwrites the open file f with zeros and deletes path, which
+// must still be that file: a path swapped for something else is left alone.
+func scrubFile(f *os.File, fi os.FileInfo, path string) error {
+	_, werr := f.WriteAt(make([]byte, fi.Size()), 0)
 	serr := f.Sync()
 	f.Close()
+	if now, err := os.Lstat(path); err != nil || !os.SameFile(fi, now) {
+		return errors.Join(errors.New("the path no longer names the file that was read"), werr, serr)
+	}
 	if err := os.Remove(path); err != nil {
 		return err
 	}

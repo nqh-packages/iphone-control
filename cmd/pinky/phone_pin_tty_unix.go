@@ -4,6 +4,9 @@ package main
 
 import "golang.org/x/sys/unix"
 
+// pinFileOpenFlags keep set from following a symlink or waiting on a pipe.
+const pinFileOpenFlags = unix.O_NOFOLLOW | unix.O_NONBLOCK
+
 // echoOff turns the terminal's echo off and returns the call that puts it
 // back; it fails when fd is not a terminal.
 func echoOff(fd int) (restore func(), err error) {
