@@ -32,12 +32,20 @@ type fakePhone struct {
 	axLooks      int // looks for the pad through accessibility
 	prompt       bool
 	presses      int // taps on the prompt's button
+	keyErrAt     int // pressKey fails on this key (1-based; 0: never)
+	lockedErrAt  int // locked fails before this key (1-based), once typing began (0: never)
+	typing       bool
 }
 
 func (f *fakePhone) freshAX() { f.fresh++ }
 
 func (f *fakePhone) screenOn(context.Context) (bool, error) { return f.on, nil }
-func (f *fakePhone) locked(context.Context) (bool, error)   { return f.isLocked, nil }
+func (f *fakePhone) locked(context.Context) (bool, error) {
+	if f.typing && f.lockedErrAt > 0 && len(f.keys) == f.lockedErrAt-1 {
+		return false, errors.New("the link went away")
+	}
+	return f.isLocked, nil
+}
 
 func (f *fakePhone) pressHome(context.Context) error {
 	f.home++
@@ -89,6 +97,9 @@ func (f *fakePhone) pressKey(_ context.Context, k keyStroke) error {
 	if !f.isLocked {
 		panic("a passcode key was typed into an unlocked phone")
 	}
+	if f.keyErrAt > 0 && len(f.keys)+1 == f.keyErrAt {
+		return errors.New("the keyboard service went away")
+	}
 	f.keys = append(f.keys, k)
 	if f.unlockAt > 0 && len(f.keys) == f.unlockAt {
 		f.isLocked = false
@@ -111,6 +122,7 @@ func (f *fakePhone) pressKey(_ context.Context, k keyStroke) error {
 
 func (f *fakePhone) sleep(_ context.Context, d time.Duration) error {
 	f.slept += d
+	f.typing = f.typing || d == afterKeypad
 	return nil
 }
 
@@ -174,6 +186,30 @@ func TestUnlock(t *testing.T) {
 		}
 		if f.swipes != 1 || len(f.keys) != 6 {
 			t.Errorf("swipes %d, keys %d; want one attempt of 6 keys", f.swipes, len(f.keys))
+		}
+	})
+	t.Run("an error between keys counts as an attempt used", func(t *testing.T) {
+		f := lockedPhone("123456")
+		f.keyErrAt = 3
+		err := unlock(ctx, f, "123456")
+		if !errors.Is(err, driver.ErrLocked) || errors.Is(err, driver.ErrPINNotEntered) || len(f.keys) != 2 {
+			t.Errorf("err %v, keys %d; want ErrLocked after 2 keys", err, len(f.keys))
+		}
+	})
+	t.Run("a lost look between keys counts as an attempt used", func(t *testing.T) {
+		f := lockedPhone("123456")
+		f.lockedErrAt = 4
+		err := unlock(ctx, f, "123456")
+		if !errors.Is(err, driver.ErrLocked) || len(f.keys) != 3 {
+			t.Errorf("err %v, keys %d; want ErrLocked after 3 keys", err, len(f.keys))
+		}
+	})
+	t.Run("a lost look before the first key entered nothing", func(t *testing.T) {
+		f := lockedPhone("123456")
+		f.lockedErrAt = 1
+		err := unlock(ctx, f, "123456")
+		if !errors.Is(err, driver.ErrPINNotEntered) || errors.Is(err, driver.ErrLocked) || len(f.keys) != 0 {
+			t.Errorf("err %v, keys %d; want ErrPINNotEntered and nothing typed", err, len(f.keys))
 		}
 	})
 	t.Run("alphanumeric", func(t *testing.T) {

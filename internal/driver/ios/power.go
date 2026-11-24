@@ -224,13 +224,16 @@ func unlock(ctx context.Context, p powerPhone, pin string) error {
 	for i, k := range strokes {
 		l, err := p.locked(actx)
 		if err != nil {
-			return fmt.Errorf("unlock: %w", err)
+			if i == 0 {
+				return fmt.Errorf("unlock: %w: %w", err, driver.ErrPINNotEntered)
+			}
+			return fmt.Errorf("unlock: stopped partway: %w: %w", err, driver.ErrLocked)
 		}
 		if !l {
 			return nil
 		}
 		if err := p.pressKey(actx, k); err != nil {
-			return fmt.Errorf("unlock: typing the passcode: %w", err)
+			return fmt.Errorf("unlock: typing the passcode stopped partway: %w: %w", err, driver.ErrLocked)
 		}
 		if i < len(strokes)-1 {
 			p.sleep(actx, pinKeyGap)
