@@ -1,0 +1,5 @@
+screen 400x800 · app: Safari (com.apple.mobilesafari) · portrait · keyboard hidden
+[1] text "Sign in with a passkey" @200,300
+[2] text "Use a passkey to sign in to account.apple.com." @200,340
+[3] button "Continue" @200,420
+[4] button "Cancel" @200,480

@@ -1,0 +1,3 @@
+screen 400x800 · app: Safari (com.apple.mobilesafari) · portrait · keyboard hidden
+[1] text "Safari Cannot Open the Page" @200,300
+[2] text "Safari cannot open the page because your iPhone is not connected to the internet." @200,360

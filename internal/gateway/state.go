@@ -95,6 +95,8 @@ type device struct {
 	// result, already filtered by the policy.
 	events []screen.Event
 	last   *screen.Screen // the last raw observation
+	// dialogUp is set when the last read showed a dialog over the app.
+	dialogUp bool
 	// treeless is the app whose screen OCR read while its tree stayed
 	// sparse for all of treeWait (awaitTree): its reads are not waited
 	// for again until another app shows a sparse tree.
@@ -230,6 +232,7 @@ type lease struct {
 	lastUsed time.Time
 	inflight int
 	code     codeSlot
+	intr     interruptState
 	ended    bool
 	endedBy  string // an Outcome
 	// baseline is the last screen the agent received, for diffs.

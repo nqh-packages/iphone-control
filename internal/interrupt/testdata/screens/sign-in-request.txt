@@ -1,0 +1,6 @@
+screen 400x800 · app: SpringBoard (com.apple.springboard) · portrait · keyboard hidden
+dialog: "Sign In Requested"
+[1] text "Sign In Requested" @200,300
+[2] text "Your Apple Account is being used to sign in on a web browser." @200,340
+[3] button "Allow" @200,440
+[4] button "Don't Allow" @200,500

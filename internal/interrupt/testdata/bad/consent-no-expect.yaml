@@ -1,0 +1,7 @@
+entries:
+  - name: allow-all
+    kind: consent
+    when:
+      texts: ["Allow"]
+    do:
+      - tap: "Allow"

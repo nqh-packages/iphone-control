@@ -1,0 +1,9 @@
+screen 400x800 · app: Safari (com.apple.mobilesafari) · portrait · keyboard hidden
+[1] text "Enter the verification code" @200,260
+[20] input "Digit 1" @60,360 size=40x44
+[21] input "Digit 2" @116,360 size=40x44
+[22] input "Digit 3" @172,360 size=40x44
+[23] input "Digit 4" @228,360 size=40x44
+[24] input "Digit 5" @284,360 size=40x44
+[25] input "Digit 6" @340,360 size=40x44
+[30] text "Incorrect verification code" @200,430

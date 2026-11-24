@@ -1,0 +1,9 @@
+screen 400x800 · app: SpringBoard (com.apple.springboard) · portrait · keyboard hidden
+[1] text "Apple Account verification code" @200,300
+[10] text "4" @60,360 size=30x44
+[11] text "8" @116,360 size=30x44
+[12] text "2" @172,360 size=30x44
+[13] text "9" @228,360 size=30x44
+[14] text "1" @284,360 size=30x44
+[15] text "3" @340,360 size=30x44
+[3] button "Done" @200,460

@@ -1,0 +1,8 @@
+entries:
+  - name: password
+    kind: credential
+    expect: store
+    when:
+      texts: ["Password"]
+    do:
+      - type_account: agents

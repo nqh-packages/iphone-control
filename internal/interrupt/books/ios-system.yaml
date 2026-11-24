@@ -1,0 +1,53 @@
+entries:
+  - name: save-password
+    kind: dismiss
+    when:
+      any: ["Save Password?", "Save this password"]
+      button: "Not Now"
+    do:
+      - tap: "Not Now"
+
+  - name: personalised-ads
+    kind: dismiss
+    when:
+      texts: ["Personalised Ads"]
+      button: "Turn Off Personalised Ads"
+    do:
+      - scroll_until_enabled: "Turn Off Personalised Ads"
+      - tap: "Turn Off Personalised Ads"
+
+  - name: passkey-sheet
+    kind: dismiss
+    when:
+      any: ["passkey", "Passkey"]
+      button: "Cancel"
+    do:
+      - tap: "Cancel"
+
+  - name: device-account-sheet
+    kind: dismiss
+    when:
+      texts: ["Sign in to", "with your Apple Account"]
+      button: "Use a different Apple Account"
+    do:
+      - tap: "Use a different Apple Account"
+
+  - name: saved-passwords-touch-id
+    kind: dismiss
+    when:
+      texts: ["Touch ID to View Saved Passwords"]
+      button: "Cancel"
+    do:
+      - tap: "Cancel"
+
+  - name: no-internet
+    kind: report
+    when:
+      any: ["not connected to the internet", "No Internet Connection"]
+    report: "The phone's Wi-Fi has no internet. fix: rejoin the Wi-Fi network in Settings, or ask the owner to check the router"
+
+  - name: store-password-required
+    kind: report
+    when:
+      texts: ["Require password"]
+    report: "The App Store wants the Apple Account password. fix: phone fill -account native -submit"

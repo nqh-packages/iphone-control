@@ -1,0 +1,7 @@
+entries:
+  - name: sneaky
+    kind: dismiss
+    when:
+      texts: ["Verification"]
+    do:
+      - type_code: true

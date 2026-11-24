@@ -205,6 +205,7 @@ Leases a phone for a task and returns its first screen.
 | `read_only` | boolean | Run the task read-only, whatever the agent's scope: anything the person's rules would ask about is refused (`blocked_by_policy`, rule `Read-only`), and typing works only in search fields (a field that reads as one; the only field on the screen, one line high in its top quarter, with a "Search" button on its row or a search page's heading such as "历史搜索"; or, with no field shown as focused, the keyboard up and a search box's placeholder at the top of the screen with no other field on it). Connecting again for the same task never widens it. A new agent's approval card then offers read-only access first |
 | `connection` | string | iPhones with Pinky on the iPhone (WebDriverAgent) only: `auto` (the default), `helper` or `coredevice`. `helper` moves the task to the helper, which shares no screen, so apps that refuse to run while the screen is shared work; `coredevice` moves it back. Pinky moves a task to the helper by itself when `phone_launch` opens an app known to refuse screen sharing (DBS digibank, China Merchants Bank). See [Task connection](#task-connection) |
 | `own_screen` | boolean | Work on the phone's own screen even when the person has Pinky work on a background display (Settings › Phones › Work in the background), which starts empty and has no home screen. Only for work on the home screen itself: moving app icons, folders, widgets. The task stays on the phone's own screen to its end; connecting again for the same task with it moves a task off its background display. If the person used the phone's own screen in the last minute, the task starts `paused` (they are in control until they hand it over); if that screen is locked, `device_locked`. Without background work it changes nothing |
+| `expect` | string[] | What the task starts: `sign-in` or `store`. Interrupt entries of kind `consent` and `credential` fire only for a task that declared their name (see [Interrupts](#interrupts-the-gateway-clears-by-itself)). From a shell: `pinkyctl phone run -expect sign-in` |
 | `wait_ms` | integer, ≤ 600000 | Wait for the phone instead of returning `lease_held` at once, first come first served. One call waits up to about 30 s (the call budget less 15 s for the first screen), then returns `lease_held` with the place in line; call again within 5 s to keep it |
 
 The first connection of an agent the person has not approved yet returns `approval_pending` (rule `New agent`); repeat with `approval_id`. Another session's phone returns `lease_held`. Calling again with the same task keeps the lease. A phone that runs another task of the session, or of the agent's earlier session that this one continues, returns `lease_held` naming that task and changes nothing: end it with `phone_release` first, or pass `device` to use another phone. Without `device`, a new task never goes to a phone that runs another one ([below](#one-session-several-tasks)). After the person pressed Stop, the session cannot connect to that phone again. While the person is in control of the phone (they took over and have not handed back, whichever task was running), the lease starts paused and the result is `paused`: call `phone_handoff`. A phone that is connected but waits for a step (Trust, Allow USB debugging, Developer Mode, …) is leased all the same and returns `device_needs_setup`, without a screen, so `phone_handoff` can ask the person for the step; other calls return `device_needs_setup` until the phone is ready.
@@ -352,6 +353,30 @@ pinkyctl phone call phone_type '{"ref":9,"text":"{{code}}"}'
 - The code is single use. A tap on a resend label (or a newer code on screen) drops it; a code the page rejected is never retyped, and after 2 rejected codes in a task `{{code}}` is refused. The count lives in memory.
 - Refused with a `fix:` line and nothing done: no code seen lately, a code older than 120 s, the text holds `{{code}}` with other text around it, or a target that is not a code field or a row of code boxes.
 - Unlike `{{secret:}}`, it needs no staged secret and no `credential_apps` entry: the value comes from the phone's own screen.
+
+#### Interrupts the gateway clears by itself
+
+A surprise screen in front of the task is an interrupt. Pinky clears the ones its **book** knows, as data, before an action that aims at the screen and inside `phone_wait_for`'s polling, and tells the agent what it did: `handled: save-password` in the result. Each step of an entry goes through the same pipeline as an agent's own action, so the person's rules, blocked apps and credential rules judge it, and a step that would ask the person is refused instead (the entry reports `stuck:`). An action aimed at the screen that an interrupt was cleared from answers `stale` once with `handled:`: read the screen again.
+
+Built-in entries live in `internal/interrupt/books/*.yaml`; add your own in `$PINKY_HOME/interrupts.d/*.yaml` (read when the daemon starts; a file that breaks a rule is skipped and logged with `file:line: rule` and a fix). Four kinds, fixed by the loader:
+
+| Kind | May do | Fires for |
+| --- | --- | --- |
+| `dismiss` | `tap`, `scroll_until_enabled`, `wait` | every task |
+| `consent` | `tap` | a task that declared `expect` and typed a credential in the last 5 minutes (`after: credential_typed`) |
+| `credential` | `type_code` | a task that declared `expect`; it types `{{code}}` and never retypes a rejected code |
+| `report` | nothing | every task; the result carries the entry's message and its `fix:` |
+
+An entry's `when` needs `texts` (all must show), `any` (one must show) or a `shape` (`code_shown`, `code_field`); `button` and `apps` only narrow it. A `code_shown` entry fires only after the code the screen shows was kept for `{{code}}`, so a code display is never dismissed before it was read. At most 3 entries run per call and each runs at most its `max` (default 2, at most 3) times per task.
+
+A dialog no entry covers is never touched: an action aimed at the screen returns `stale` with `interrupt: "<title>" · buttons: ...` and a `fix:` line to add an entry.
+
+```sh
+pinkyctl phone interrupts check <file.yaml>
+pinkyctl phone interrupts match <file.yaml> <screen.txt> [-expect NAME] [-typed]
+```
+
+`match` runs the gateway's own `Match` offline on a saved `phone call observe` and prints the entry that fires and its steps.
 
 ### phone_swipe
 

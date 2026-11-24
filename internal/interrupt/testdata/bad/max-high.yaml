@@ -1,0 +1,8 @@
+entries:
+  - name: loop
+    kind: dismiss
+    max: 9
+    when:
+      texts: ["Again"]
+    do:
+      - tap: "Again"

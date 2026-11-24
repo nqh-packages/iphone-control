@@ -1,0 +1,6 @@
+seams:
+  - name: interrupt book user files
+    package: example.test/internal/interrupt
+    symbols: [UserFiles]
+    allowed: [cmd/pinky/ok.go]
+    fix: read the user book only in cmd/pinky/ok.go

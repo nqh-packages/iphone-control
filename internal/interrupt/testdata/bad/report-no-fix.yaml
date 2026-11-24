@@ -1,0 +1,6 @@
+entries:
+  - name: no-fix
+    kind: report
+    when:
+      texts: ["Offline"]
+    report: "Offline"

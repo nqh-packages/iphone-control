@@ -221,6 +221,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		AutoUnlock:     au.On,
 		PINOutcome:     au.Outcome,
 		Secrets:        vlt,
+		Interrupts:     loadInterruptBook(dirs, log),
 		AllowDevices:   allowDevices(),
 		LeaseReserve:   15 * time.Second,
 		TrafficKeys:    trafficKeys(c.Fake),
