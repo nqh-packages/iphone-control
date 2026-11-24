@@ -1,7 +1,11 @@
 package vault
 
 import (
+	"context"
+	"encoding/json"
 	"errors"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -229,5 +233,100 @@ func TestMask(t *testing.T) {
 	*now = now.Add(typedFor + time.Second)
 	if n := v.Mask(read()); n != 0 {
 		t.Errorf("masked %d after the window", n)
+	}
+}
+
+func socketPair(t *testing.T, v *Vault) string {
+	t.Helper()
+	dir, err := os.MkdirTemp("/tmp", "vs")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	sock := filepath.Join(dir, "vault.sock")
+	ln, err := Listen(sock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- v.Serve(ctx, ln) }()
+	t.Cleanup(func() {
+		cancel()
+		<-done
+	})
+	return sock
+}
+
+func TestSocketStagesAndNeverEchoes(t *testing.T) {
+	v, _ := newTestVault(bank.ID)
+	sock := socketPair(t, v)
+	fi, err := os.Stat(sock)
+	if err != nil || fi.Mode().Perm() != 0o600 {
+		t.Fatalf("socket mode: %v %v", fi, err)
+	}
+	got, err := StageSecret(context.Background(), sock, bank.ID, 30*time.Second, []string{"pw", "otp"},
+		strings.NewReader(sentinel+"\n482913\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.App != bank.ID || len(got.Names) != 2 || got.ExpiresInS != 30 {
+		t.Fatalf("reply: %+v", got)
+	}
+	if b, _ := json.Marshal(got); strings.Contains(string(b), sentinel) || strings.Contains(string(b), "482913") {
+		t.Fatalf("the reply holds a value: %s", b)
+	}
+	if val, err := v.TakeSecret("pw", bank); err != nil || val != sentinel {
+		t.Fatalf("staged value: %q %v", val, err)
+	}
+	if val, err := v.TakeSecret("otp", bank); err != nil || val != "482913" {
+		t.Fatalf("staged value: %q %v", val, err)
+	}
+}
+
+func TestSocketRefusals(t *testing.T) {
+	v, _ := newTestVault(bank.ID)
+	sock := socketPair(t, v)
+	ctx := context.Background()
+	_, err := StageSecret(ctx, sock, "com.example.unlisted", 0, []string{"pw"}, strings.NewReader(sentinel+"\n"))
+	var se *StageError
+	if !errors.As(err, &se) || !strings.Contains(se.Fix, "credential_apps") || strings.Contains(err.Error(), sentinel) {
+		t.Fatalf("unlisted app: %v", err)
+	}
+	for _, c := range []struct {
+		name  string
+		names []string
+		input string
+	}{
+		{"missing line", []string{"pw", "otp"}, sentinel + "\n"},
+		{"empty line", []string{"pw"}, "\n"},
+		{"no input", []string{"pw"}, ""},
+		{"long line", []string{"pw"}, strings.Repeat("a", valueMax+1) + "\n"},
+	} {
+		if _, err := StageSecret(ctx, sock, bank.ID, 0, c.names, strings.NewReader(c.input)); err == nil {
+			t.Errorf("%s: accepted", c.name)
+		}
+	}
+	if _, err := StageSecret(ctx, sock, bank.ID, 0, []string{"Bad Name"}, strings.NewReader(sentinel+"\n")); err == nil {
+		t.Error("a bad name was accepted")
+	}
+	if err := v.Staged("pw", bank); !errors.Is(err, ErrNotStaged) {
+		t.Fatalf("a refused request left a secret staged: %v", err)
+	}
+	if _, err := StageSecret(ctx, filepath.Join(filepath.Dir(sock), "none.sock"), bank.ID, 0, []string{"pw"}, strings.NewReader(sentinel+"\n")); err == nil || strings.Contains(err.Error(), sentinel) {
+		t.Fatalf("no daemon: %v", err)
+	}
+}
+
+func TestSocketNeedsAPrivateFolder(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Listen(filepath.Join(dir, "v.sock")); err == nil || !strings.Contains(err.Error(), "0700") {
+		t.Fatalf("an open folder was accepted: %v", err)
 	}
 }

@@ -80,10 +80,7 @@ func (v *Vault) Put(app string, ttl time.Duration, named map[string][]byte) erro
 	if app == "" || !v.allowed(app) {
 		return &refusal{ErrAppNotAllowed, fmt.Sprintf("%s is not on credential_apps", app)}
 	}
-	if ttl <= 0 {
-		ttl = DefaultTTL
-	}
-	ttl = min(ttl, MaxTTL)
+	ttl = ClampTTL(ttl)
 	for name, val := range named {
 		if !ValidName(name) {
 			return &refusal{ErrBadSecret, errBadRef}
@@ -108,6 +105,15 @@ func (v *Vault) Put(app string, ttl time.Duration, named map[string][]byte) erro
 		v.slots[name] = &slot{app: app, value: append([]byte(nil), val...), expires: now.Add(ttl)}
 	}
 	return nil
+}
+
+// ClampTTL is the lifetime a stager gets: DefaultTTL when it names none, and
+// at most MaxTTL.
+func ClampTTL(ttl time.Duration) time.Duration {
+	if ttl <= 0 {
+		return DefaultTTL
+	}
+	return min(ttl, MaxTTL)
 }
 
 // Staged reports whether TakeSecret would hand out name for app now,
