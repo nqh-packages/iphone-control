@@ -4,6 +4,21 @@ Pinky lets AI agents operate a person's real iPhone or Android phone over MCP, w
 
 Read [docs/WORKING.md](docs/WORKING.md) before you change anything: who owns which part of the code, how to use the real phones safely, and the rules for code and commits. Build and test with `make check` (build, vet, test); [README.md](README.md) has the rest.
 
+
+## This is iphone-control, a fork
+
+`nqh-packages/iphone-control` is Pinky with a dedicated iPhone (an iPhone SE, iOS 26.2) driven by agents, not a person. Upstream is `DIYgod/pinky` (remote `upstream`); keep the diff against it small. Decisions and designs: [docs/notes/iphone-control/DESIGN.md](docs/notes/iphone-control/DESIGN.md) (CLI and lease line) and [docs/notes/iphone-control/EXTRAS.md](docs/notes/iphone-control/EXTRAS.md) (unlock, credentials, approval gates). The upstream rules below about releases, locales and changelogs do not apply here: a fork push is not a release.
+
+- **Build and sign:** `CGO_ENABLED=0 go build -o build/pinky ./cmd/pinky`, then `codesign --force --sign "Apple Development: <name> (<id>)" build/pinky` (a rebuilt unsigned binary loses access to its keychain item).
+- **Daemon:** `PINKY_HOME=<dir> PINKY_TRUST_AGENTS=1 PINKY_AUTO_UNLOCK=1 PINKY_ALLOW_DEVICES=<udid> build/pinky daemon --http 127.0.0.1:7465`. `PINKY_ALLOW_DEVICES` is the only phone the gateway knows; every other phone on this Mac is invisible to it.
+- **Install the phone helper once:** `build/pinky helper install --team <team id> <udid>` (signed with the paid team, valid a year). iOS asks for the phone's passcode on its screen now and then to allow automation; until someone enters it the phone reads `needs_setup`.
+- **Agent surface:** `pinkyctl phone status | tools | call | run` (docs/mcp.md, "From a shell"). The lease queues first come first served (`wait_ms`, `-wait`), a releasing name keeps the phone for 15 s, `phone status` is one JSON line. Name your run with `IPHONE_LEASE_HOLDER`.
+- **Secrets:** the phone's PIN (`pinkyctl phone pin set|check|delete`) and credentials (`pinkyctl phone secret put`, staged by the owner's credential broker, typed as `{{secret:NAME}}`) never touch a file, argument, log or transcript. No tool prints them. Never run the broker or read the keychain item to learn a value.
+- **Gates:** only payments, erasing the iPhone, leaving the Apple Account and removing the passcode wait for a person (`internal/policy/presets.go`). Everything else is the agent's.
+- **Seam guards:** `internal/forkseams` (declaration `seams.yaml`) limits who may call the PIN reader, the vault and the staged-secret hand-out. Widening a rule means editing the declaration in the same commit and saying why.
+- **Prove it:** `.agents/skills/verify-iphone-control` in the `ipad-local` repo drives the real phone (status, two named holders, a gate). Targeted tests while working; `make check` once at the end (the gate).
+- **Never:** call the phone, the daemon, `helper install` or the credential broker from a test; use `git add -A`; commit a device identifier, serial, MAC or passcode.
+
 ## README
 
 The README comes in English, [README.md](README.md), and in Simplified Chinese, [README.zh-CN.md](README.zh-CN.md), which follows it section by section (building from source is only summed up there). Change both in the same commit. Write the Chinese with the app's own names for menus and buttons (`cmd/pinky/locales/zh-Hans.json`), and give a new picture with words in it a Chinese copy next to the English one (`assets/readme/*-zh.*`).
