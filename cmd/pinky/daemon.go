@@ -164,9 +164,10 @@ type runningGateway struct {
 	// Mirror shows the phones in a web browser while the web mirror is on.
 	Mirror *webMirror
 
-	ln  net.Listener
-	srv *api.Server
-	log *slog.Logger
+	ln        net.Listener
+	srv       *api.Server
+	log       *slog.Logger
+	stopVault func()
 }
 
 // startGateway takes the per-user socket, loads the rules and starts the
@@ -205,6 +206,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		}
 	}
 
+	vlt, stopVault := newSecretVault(pol, dirs, log)
 	au := newAutoUnlock(c)
 	if au.On {
 		log.Info("auto unlock is on: a call that finds the phone locked enters the saved passcode", "allowed_devices", len(allowDevices()))
@@ -218,18 +220,21 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		PIN:            au.PIN,
 		AutoUnlock:     au.On,
 		PINOutcome:     au.Outcome,
+		Secrets:        vlt,
 		AllowDevices:   allowDevices(),
 		LeaseReserve:   15 * time.Second,
 		TrafficKeys:    trafficKeys(c.Fake),
 		TrafficTailnet: trafficTailnet(c.Fake),
 	})
 	if err != nil {
+		stopVault()
 		ln.Close()
 		return nil, err
 	}
 	tok, err := api.EnsureToken(dirs.TokenFile())
 	if err != nil {
 		g.Close()
+		stopVault()
 		ln.Close()
 		return nil, fmt.Errorf("agent token: %w", err)
 	}
@@ -239,7 +244,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 	// Pinky runs again, however it started (quitmark.go).
 	gatewayUp(dirs, c.Fake, log)
 	return &runningGateway{Dirs: dirs, DataDir: dataDir, Policy: pol, G: g, Remote: newRemoteAgents(m, tok, log), MCP: m,
-		Mirror: newWebMirror(g, log), ln: ln, srv: srv, log: log}, nil
+		Mirror: newWebMirror(g, log), ln: ln, srv: srv, log: log, stopVault: stopVault}, nil
 }
 
 // Serve answers agents and clients on the socket until ctx ends.
@@ -256,6 +261,9 @@ func (r *runningGateway) Close() {
 		r.Mirror.Close()
 	}
 	r.G.Close()
+	if r.stopVault != nil {
+		r.stopVault()
+	}
 	r.ln.Close()
 }
 

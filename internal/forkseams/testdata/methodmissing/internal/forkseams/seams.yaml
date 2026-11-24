@@ -1,0 +1,6 @@
+seams:
+  - name: secret hand-out
+    package: example.test/internal/vault
+    methods: [Renamed]
+    allowed: [cmd/pinky/ok.go]
+    fix: take a secret only in cmd/pinky/ok.go

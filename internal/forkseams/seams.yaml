@@ -13,3 +13,31 @@ seams:
       - cmd/pinky/autounlock.go
       - cmd/pinky/phone_pin.go
     fix: "get the passcode through gateway.Options.PIN, which cmd/pinky/autounlock.go wires; only the daemon wiring and the `phone pin` verbs build the store. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: secret vault
+    package: github.com/DIYgod/pinky/internal/vault
+    symbols:
+      - New
+      - Listen
+    allowed:
+      - cmd/pinky/secrets.go
+    fix: "the vault is built and given its socket only by the daemon wiring in cmd/pinky/secrets.go; everything else gets it as gateway.Options.Secrets. If another file really needs one, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: secret staging
+    package: github.com/DIYgod/pinky/internal/vault
+    symbols:
+      - StageSecret
+    allowed:
+      - cmd/pinky/phone_secret.go
+    fix: "secrets are staged only by `pinkyctl phone secret put` (cmd/pinky/phone_secret.go), which the owner's credential broker runs. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: secret hand-out
+    package: github.com/DIYgod/pinky/internal/vault
+    methods:
+      - TakeSecret
+    allowed:
+      - internal/gateway/secrets.go
+    fix: "a staged secret leaves the vault only in internal/gateway/secrets.go, just before the driver types it. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: secret store input
+    package: github.com/DIYgod/pinky/internal/vault
+    methods:
+      - Put
+    allowed: []
+    fix: "values enter the vault only through its socket (internal/vault/socket.go), so the credential broker's staging is the one way in. If another file really needs Put, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."

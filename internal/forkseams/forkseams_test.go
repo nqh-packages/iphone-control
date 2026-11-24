@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,9 @@ type seam struct {
 	Name    string   `yaml:"name"`
 	Package string   `yaml:"package"`
 	Symbols []string `yaml:"symbols"`
+	// Methods are methods of the package's types, matched by name wherever
+	// a selector uses them: a file need not import the package to call one.
+	Methods []string `yaml:"methods"`
 	Allowed []string `yaml:"allowed"`
 	Fix     string   `yaml:"fix"`
 }
@@ -91,6 +95,7 @@ func check(root string) ([]violation, error) {
 	for _, rel := range files {
 		for _, s := range decl.Seams {
 			out = append(out, useOutsideAllowed(root, module, rel, s)...)
+			out = append(out, methodUseOutsideAllowed(root, module, rel, s)...)
 		}
 	}
 	sort.SliceStable(out, func(i, j int) bool {
@@ -147,6 +152,56 @@ func declarationProblems(root, module string, s seam, seen map[string]bool) []vi
 			problem("symbol-missing", sym+" is not declared in package "+s.Package)
 		}
 	}
+	methods := declaredMethods(filepath.Join(root, filepath.FromSlash(packageDir(module, s.Package))))
+	for _, m := range s.Methods {
+		key := s.Package + ".(method)." + m
+		if seen[key] {
+			problem("symbol-declared-twice", key+" is declared in more than one seam")
+		}
+		seen[key] = true
+		if !methods[m] {
+			problem("symbol-missing", m+" is not a method declared in package "+s.Package)
+		}
+	}
+	return out
+}
+
+func declaredMethods(dir string) map[string]bool {
+	out := map[string]bool{}
+	pkgs, _ := parser.ParseDir(token.NewFileSet(), dir, func(fi fs.FileInfo) bool { return !strings.HasSuffix(fi.Name(), "_test.go") }, 0)
+	for _, p := range pkgs {
+		for _, f := range p.Files {
+			for _, d := range f.Decls {
+				if fn, ok := d.(*ast.FuncDecl); ok && fn.Recv != nil {
+					out[fn.Name.Name] = true
+				}
+			}
+		}
+	}
+	return out
+}
+
+// methodUseOutsideAllowed finds every selector that names one of a seam's
+// methods in a file that is not allowed to use it. Methods have no import to
+// follow, so the match is by name: a seam names methods unlikely to be
+// called on anything else.
+func methodUseOutsideAllowed(root, module, rel string, s seam) []violation {
+	if len(s.Methods) == 0 || path.Dir(rel) == packageDir(module, s.Package) || slices.Contains(s.Allowed, rel) {
+		return nil
+	}
+	fset := token.NewFileSet()
+	f, err := parser.ParseFile(fset, filepath.Join(root, filepath.FromSlash(rel)), nil, 0)
+	if err != nil {
+		return []violation{{File: rel, Line: 1, Rule: "unparsable", What: err.Error(), Fix: "fix the syntax error"}}
+	}
+	var out []violation
+	ast.Inspect(f, func(n ast.Node) bool {
+		if sel, ok := n.(*ast.SelectorExpr); ok && slices.Contains(s.Methods, sel.Sel.Name) {
+			out = append(out, violation{File: rel, Line: fset.Position(sel.Sel.Pos()).Line, Rule: "seam-" + strings.ReplaceAll(s.Name, " ", "-"),
+				What: "." + sel.Sel.Name + " is used outside the files that may use it", Fix: s.Fix})
+		}
+		return true
+	})
 	return out
 }
 
@@ -247,6 +302,8 @@ func TestForkSeamsGuardCatchesEachRule(t *testing.T) {
 		{"missingfile", "allowed-file-missing", "internal/forkseams/seams.yaml", 1},
 		{"twice", "symbol-declared-twice", "internal/forkseams/seams.yaml", 1},
 		{"nosymbol", "symbol-missing", "internal/forkseams/seams.yaml", 1},
+		{"method", "seam-secret-hand-out", "cmd/other/use.go", 4},
+		{"methodmissing", "symbol-missing", "internal/forkseams/seams.yaml", 1},
 	}
 	for _, r := range rows {
 		vs, err := check(filepath.Join("testdata", r.dir))
@@ -289,7 +346,7 @@ func TestForkSeamsAllowedFilesExistAndUseTheSeam(t *testing.T) {
 				continue
 			}
 			var uses bool
-			for _, sym := range s.Symbols {
+			for _, sym := range append(slices.Clone(s.Symbols), s.Methods...) {
 				uses = uses || strings.Contains(string(b), sym)
 			}
 			if !uses {

@@ -3,11 +3,15 @@ package main
 import (
 	"bytes"
 	"context"
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/DIYgod/pinky/internal/api"
+	"github.com/DIYgod/pinky/internal/policy"
 	"github.com/DIYgod/pinky/internal/screen"
 	"github.com/DIYgod/pinky/internal/vault"
 )
@@ -114,5 +118,50 @@ func TestPhoneSecretPutWithoutADaemon(t *testing.T) {
 	code := phoneMain([]string{"secret", "put", "-app", "com.example.bank", "pw"}, phoneIO{in: strings.NewReader(secretSentinel + "\n"), out: &o, err: &er})
 	if code != phoneExitNoGateway || !strings.Contains(er.String(), "fix: ") || strings.Contains(o.String()+er.String(), secretSentinel) {
 		t.Fatalf("%d %q %q", code, o.String(), er.String())
+	}
+}
+
+func TestPhoneSecretDaemonVault(t *testing.T) {
+	dir, err := os.MkdirTemp("/tmp", "pd")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { os.RemoveAll(dir) })
+	if err := os.Chmod(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	dirs := api.Dirs{Run: dir}
+	f := policy.DefaultFile()
+	f.CredentialApps = []string{"com.example.bank"}
+	v, stop := newSecretVault(policy.New(f, nil), dirs, slog.New(slog.NewTextHandler(io.Discard, nil)))
+	if v == nil {
+		t.Fatal("no vault")
+	}
+	old := phoneVaultSocket
+	phoneVaultSocket = func() (string, error) { return vaultSocketIn(dirs), nil }
+	t.Cleanup(func() { phoneVaultSocket = old })
+
+	var o, er bytes.Buffer
+	code := phoneMain([]string{"secret", "put", "-app", "com.example.bank", "pw"}, phoneIO{in: strings.NewReader(secretSentinel + "\n"), out: &o, err: &er})
+	if code != 0 {
+		t.Fatalf("%d %q %q", code, o.String(), er.String())
+	}
+	if got, err := v.TakeSecret("pw", screen.App{ID: "com.example.bank"}); err != nil || got != secretSentinel {
+		t.Fatalf("staged: %q %v", got, err)
+	}
+	code = phoneMain([]string{"secret", "put", "-app", "com.example.other", "pw"}, phoneIO{in: strings.NewReader(secretSentinel + "\n"), out: &o, err: &er})
+	if code != phoneExitToolError || !strings.Contains(er.String(), "credential_apps") {
+		t.Fatalf("an app that is not listed: %d %q", code, er.String())
+	}
+	stop()
+	code = phoneMain([]string{"secret", "put", "-app", "com.example.bank", "pw"}, phoneIO{in: strings.NewReader(secretSentinel + "\n"), out: &o, err: &er})
+	if code != phoneExitNoGateway {
+		t.Fatalf("after stop: %d", code)
+	}
+
+	short := filepath.Join(dir, strings.Repeat("x", 120))
+	if v, stop := newSecretVault(policy.New(f, nil), api.Dirs{Run: short}, slog.New(slog.NewTextHandler(io.Discard, nil))); v != nil {
+		stop()
+		t.Fatal("a vault without a socket")
 	}
 }
