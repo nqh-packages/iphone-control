@@ -327,10 +327,12 @@ What is refused, each with a `fix:` line and nothing done:
 
 - text that holds `{{secret:` but is not exactly one reference (`invalid_argument`);
 - a reference into anything but a password or one-time-code field, or into an app that is not on `credential_apps` (`blocked_by_policy`, rule `credentials`); literal text into those fields is refused everywhere, as ever;
-- a secret that is not staged, expired, used, or staged for another app than the one in front (`not_found`);
+- a secret that is not staged, expired, used, or staged for another app than the one in front (`not_found`; the message does not say which app a name was staged for);
 - a daemon with no vault (`blocked_by_policy`).
 
-An app on `credential_apps` loses only the bundled **Finance apps** and **Password managers** blocks. Payments there still ask, the person's own blocked apps stay blocked, and read-only mode, scope and the task's app list still apply.
+Staging a name that still holds a live secret is refused (`pinkyctl phone secret put` says so, with a fix line): use another name, or wait until it is used or expires. A driver failure while a secret is typed is reported as "typing the secret failed; check the field and stage it again", without the driver's text. While `rules.yaml` cannot be read, no secret is staged or typed anywhere.
+
+An app on `credential_apps` loses only the bundled **Finance apps** and **Password managers** blocks. Listing a password manager lifts its whole block, so the agent could read its screen: list only the apps a secret is typed into. Payments there still ask, the person's own blocked apps stay blocked, and read-only mode, scope and the task's app list still apply.
 
 ### phone_swipe
 
