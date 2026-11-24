@@ -2,6 +2,9 @@ package secret
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/rand"
+	"crypto/sha256"
 	"errors"
 	"sync"
 	"time"
@@ -71,13 +74,25 @@ type AgentPINs struct {
 	now   func() time.Time
 
 	mu      sync.Mutex
+	key     []byte
 	next    map[string]time.Time
-	refused map[string]bool
+	handed  map[string]string
+	refused map[string]string
 }
 
 // NewAgentPINsOn keeps passcodes in store.
 func NewAgentPINsOn(store PINStore) *AgentPINs {
-	return &AgentPINs{store: store, now: time.Now, next: map[string]time.Time{}, refused: map[string]bool{}}
+	key := make([]byte, 32)
+	_, _ = rand.Read(key)
+	return &AgentPINs{store: store, now: time.Now, key: key, next: map[string]time.Time{}, handed: map[string]string{}, refused: map[string]string{}}
+}
+
+// fingerprint identifies a passcode inside this process without keeping it:
+// an HMAC under a key that exists only in memory.
+func (p *AgentPINs) fingerprint(pin string) string {
+	m := hmac.New(sha256.New, p.key)
+	m.Write([]byte(pin))
+	return string(m.Sum(nil))
 }
 
 // Save keeps a device's passcode and forgets that an earlier one was refused.
@@ -111,6 +126,7 @@ func (p *AgentPINs) Delete(deviceID string) error {
 func (p *AgentPINs) forget(deviceID string) {
 	p.mu.Lock()
 	delete(p.next, deviceID)
+	delete(p.handed, deviceID)
 	delete(p.refused, deviceID)
 	p.mu.Unlock()
 }
@@ -125,7 +141,8 @@ func (p *AgentPINs) State(deviceID string) (PINState, error) {
 	refused, err := p.store.Exists(refusedAccount(deviceID))
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	return PINState{Saved: true, Refused: refused || p.refused[deviceID]}, err
+	_, memory := p.refused[deviceID]
+	return PINState{Saved: true, Refused: refused || memory}, err
 }
 
 // PIN hands out the passcode for gateway.Options.PIN. It answers ErrNotFound
@@ -137,34 +154,50 @@ func (p *AgentPINs) PIN(ctx context.Context, deviceID string) (string, error) {
 	if err := ctx.Err(); err != nil {
 		return "", err
 	}
-	st, err := p.State(deviceID)
-	switch {
-	case err != nil:
+	saved, err := p.store.Exists(PINAccount(deviceID))
+	if err != nil {
 		return "", err
-	case !st.Saved:
+	}
+	if !saved {
 		return "", ErrNotFound
-	case st.Refused:
+	}
+	marked, err := p.store.Exists(refusedAccount(deviceID))
+	if err != nil {
+		return "", err
+	}
+	if marked {
 		return "", ErrPINRefused
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if p.now().Before(p.next[deviceID]) {
+	_, held := p.refused[deviceID]
+	if !held && p.now().Before(p.next[deviceID]) {
 		return "", ErrPINBackoff
 	}
 	pin, err := p.store.Read(PINAccount(deviceID))
 	if err != nil {
 		return "", err
 	}
+	fp := p.fingerprint(pin)
+	if held {
+		if want := p.refused[deviceID]; want == "" || want == fp {
+			return "", ErrPINRefused
+		}
+		delete(p.refused, deviceID)
+	}
+	p.handed[deviceID] = fp
 	p.next[deviceID] = p.now().Add(pinBackoff)
 	return pin, nil
 }
 
 // Refused records that the phone refused the passcode just handed out. The
-// refusal is kept in the store, so it holds after a restart, and in memory in
-// case the store cannot take it. Only Save clears it.
+// refusal is kept in the store, so it holds after a restart, and in memory,
+// tied to that passcode, in case the store cannot take it or another process
+// saves a different passcode meanwhile. Only a Save clears it.
 func (p *AgentPINs) Refused(deviceID string) {
 	p.mu.Lock()
-	p.refused[deviceID] = true
+	p.refused[deviceID] = p.handed[deviceID]
+	delete(p.next, deviceID)
 	p.mu.Unlock()
 	_ = p.store.Save(refusedAccount(deviceID), "1")
 }

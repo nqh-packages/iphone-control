@@ -198,3 +198,41 @@ func TestAgentPINFixLinesNameTheRightStep(t *testing.T) {
 		t.Error("an unknown error got a fix")
 	}
 }
+
+func TestAgentPINNewSaveFromAnotherProcessEndsARefusalHeldInMemory(t *testing.T) {
+	store := &failingMarkerStore{}
+	daemon, _ := newTestPINs(store)
+	cli, _ := newTestPINs(store)
+	ctx := context.Background()
+	daemon.Save("se", []byte(sentinelPIN))
+	if _, err := daemon.PIN(ctx, "se"); err != nil {
+		t.Fatal(err)
+	}
+	daemon.Refused("se")
+	if _, err := daemon.PIN(ctx, "se"); !errors.Is(err, ErrPINRefused) {
+		t.Fatalf("PIN after a refusal = %v, want ErrPINRefused", err)
+	}
+
+	if err := cli.Save("se", []byte("4711")); err != nil {
+		t.Fatal(err)
+	}
+	if got, err := daemon.PIN(ctx, "se"); err != nil || got != "4711" {
+		t.Fatalf("PIN after another process saved a different passcode = %q, %v", got, err)
+	}
+}
+
+func TestAgentPINSameSaveFromAnotherProcessStaysRefused(t *testing.T) {
+	store := &failingMarkerStore{}
+	daemon, _ := newTestPINs(store)
+	cli, _ := newTestPINs(store)
+	ctx := context.Background()
+	daemon.Save("se", []byte(sentinelPIN))
+	daemon.PIN(ctx, "se")
+	daemon.Refused("se")
+	if err := cli.Save("se", []byte(sentinelPIN)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := daemon.PIN(ctx, "se"); !errors.Is(err, ErrPINRefused) {
+		t.Fatalf("PIN after the same passcode was saved again = %v, want ErrPINRefused", err)
+	}
+}
