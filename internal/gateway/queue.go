@@ -3,6 +3,7 @@ package gateway
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -25,10 +26,12 @@ type ticket struct {
 	lastCall time.Time // when that session's last waiting call returned
 }
 
-const (
-	ticketGrace = 5 * time.Second  // an abandoned ticket stops holding the line after this
-	maxWait     = 10 * time.Minute // wait_ms above this is cut to it
-)
+// ticketGrace is how long an abandoned ticket keeps holding the line; a
+// variable so tests can shorten it.
+var ticketGrace = 5 * time.Second
+
+// maxWait is the longest wait_ms; more is cut to it.
+const maxWait = 10 * time.Minute
 
 // LeaseView is who has the phone, who it is kept for, and who waits. Read by the
 // client API in DeviceView.Lease.
@@ -43,16 +46,23 @@ type LeaseView struct {
 // Connect is phone_connect. With req.Wait it queues for the phone (this
 // file); without, it is connect: lease_held at once, as before.
 func (s *Session) Connect(ctx context.Context, req ConnectRequest) *Result {
-	return s.connect(ctx, req)
+	if req.Wait <= 0 {
+		return s.connect(ctx, req)
+	}
+	return s.g.waitTurn(ctx, s, req)
 }
 
 // turnLocked decides, inside connect's critical section, right after
 // adoption and before the other-task check, whether s may take d now. nil:
 // go on (connect then creates the lease without unlocking, so the decision
-// cannot go stale). A result: lease_held with Holder set. With wait == 0, no
-// tickets and no reservation it returns nil, and upstream's lease_held texts
-// stand. The caller holds g.mu.
+// cannot go stale). A result: lease_held with Holder set. With wait > 0 it
+// adds or refreshes s's ticket and returns the place in line, with queued
+// set. With wait == 0, no tickets and no reservation it returns nil, and
+// upstream's lease_held texts stand. The caller holds g.mu.
 func (g *Gateway) turnLocked(s *Session, d *device, wait time.Duration) *Result {
+	if l := d.lease; wait > 0 && l != nil && l.session != s && l.session.closed && !l.session.agent.Resume && l.inflight == 0 {
+		g.endLeaseLocked(l, OutcomeDisconnected, "")
+	}
 	if d.lease != nil && d.lease.session == s {
 		return nil
 	}
@@ -65,10 +75,118 @@ func (g *Gateway) turnLocked(s *Session, d *device, wait time.Duration) *Result 
 		ln.reserved = ""
 		return nil
 	}
-	if d.lease != nil && len(ln.tickets) == 0 && ln.reserved == "" {
-		return nil
+	if wait <= 0 {
+		if d.lease != nil && len(ln.tickets) == 0 && ln.reserved == "" {
+			return nil
+		}
+		return g.heldLocked(s, d, now)
 	}
-	return g.heldLocked(s, d, now)
+	return g.queuedLocked(s, d, now, min(wait, maxWait))
+}
+
+// queuedLocked puts s in line for d, or keeps its place, and says where it is.
+func (g *Gateway) queuedLocked(s *Session, d *device, now time.Time, wait time.Duration) *Result {
+	ln := &d.line
+	i := slices.IndexFunc(ln.tickets, func(t *ticket) bool { return t.session == s })
+	if i < 0 {
+		ln.tickets = append(ln.tickets, &ticket{session: s})
+		i = len(ln.tickets) - 1
+	}
+	t := ln.tickets[i]
+	if end := now.Add(wait); end.After(t.deadline) {
+		t.deadline = end
+	}
+	t.waiting = true
+	var holder, behind string
+	switch {
+	case i > 0:
+		behind = ln.tickets[i-1].session.agent.Name
+	case d.lease != nil:
+		behind = d.lease.session.agent.Name
+		holder = fmt.Sprintf("%s · %s", behind, d.lease.task.title)
+	default:
+		behind = ln.reserved
+	}
+	if holder == "" {
+		holder = behind
+	}
+	res := errResult(ErrLeaseHeld, "In line for %s: %s, behind %s. Call phone_connect again with wait_ms to keep your place.", d.name(), ordinal(i+1), behind)
+	res.Holder, res.Device, res.queued = holder, d.id, true
+	return res
+}
+
+func ordinal(n int) string {
+	switch {
+	case n%100 >= 11 && n%100 <= 13:
+	case n%10 == 1:
+		return fmt.Sprintf("%dst", n)
+	case n%10 == 2:
+		return fmt.Sprintf("%dnd", n)
+	case n%10 == 3:
+		return fmt.Sprintf("%drd", n)
+	}
+	return fmt.Sprintf("%dth", n)
+}
+
+// connectReserve is what a waiting phone_connect leaves of the call's
+// budget for connect's first read of the screen: a phone through
+// WebDriverAgent takes about 7 s for it.
+const connectReserve = 15 * time.Second
+
+// waitTurn calls connect until it returns anything but a queued lease_held,
+// waking on the device's state changes (d.wake), a short tick
+// (Options.PollInterval) for reservation and ticket expiry, ctx, or the end
+// of req.Wait or of the call's budget less connectReserve. It returns the
+// last lease_held, whose message gives the place in line. It tells a queued
+// lease_held from every other one (shared.go's other-task refusal,
+// busyElsewhereLocked) by Result.queued, which only queuedLocked sets. It
+// never parses the message.
+func (g *Gateway) waitTurn(ctx context.Context, s *Session, req ConnectRequest) *Result {
+	ctx = g.withBudget(ctx)
+	asked := time.Now().Add(min(req.Wait, maxWait))
+	end := budgetBefore(ctx, asked, connectReserve)
+	var res *Result
+	defer func() { g.settleTickets(s, res) }()
+	for {
+		req.Wait = max(time.Until(asked), time.Nanosecond)
+		res = s.connect(ctx, req)
+		remain := time.Until(end)
+		if !res.queued || remain <= 0 || ctx.Err() != nil {
+			return res
+		}
+		g.mu.Lock()
+		var wake chan struct{}
+		if d := g.findDeviceLocked(res.Device); d != nil {
+			wake = d.wake
+		}
+		g.mu.Unlock()
+		tick := time.NewTimer(min(g.opt.PollInterval, remain))
+		select {
+		case <-wake:
+		case <-tick.C:
+		case <-ctx.Done():
+		}
+		tick.Stop()
+	}
+}
+
+// settleTickets ends a waiting call: s's tickets stay for ticketGrace when
+// the call left it in line, and go when it did not.
+func (g *Gateway) settleTickets(s *Session, res *Result) {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	now := time.Now()
+	for _, d := range g.devices {
+		if res != nil && res.queued {
+			for _, t := range d.line.tickets {
+				if t.session == s {
+					t.waiting, t.lastCall = false, now
+				}
+			}
+		} else {
+			d.line.remove(s)
+		}
+	}
 }
 
 // heldLocked is the lease_held answer to s, which does not have its turn on d.
