@@ -1,0 +1,15 @@
+# Seams the fork guards. Each entry names symbols of one package that only
+# the listed files may use, so a fresh session cannot reach them by accident.
+# forkseams_test.go reads this file; `make check` runs it. To add a seam,
+# add an entry; to let another file use one, add it to `allowed` with the
+# reason in the commit. Tests (_test.go files) are not checked.
+seams:
+  - name: no-prompt passcode store
+    package: github.com/DIYgod/pinky/internal/secret
+    symbols:
+      - NewAgentPINs
+      - NewAgentPINsOn
+    allowed:
+      - cmd/pinky/autounlock.go
+      - cmd/pinky/phone_pin.go
+    fix: "get the passcode through gateway.Options.PIN, which cmd/pinky/autounlock.go wires; only the daemon wiring and the `phone pin` verbs build the store. If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."

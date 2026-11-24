@@ -205,13 +205,19 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 		}
 	}
 
+	au := newAutoUnlock(c)
+	if au.On {
+		log.Info("auto unlock is on: a call that finds the phone locked enters the saved passcode", "allowed_devices", len(allowDevices()))
+	}
 	g, err := gateway.New(gateway.Options{
 		Providers: providers, DataDir: dataDir, Policy: pol, Logger: log,
 		ApprovalTimeout: c.ApprovalTimeout, IdleTimeout: c.IdleTimeout, NoScreenshots: c.NoScreenshots,
 		// Fake phones cannot hurt anything, so agents need no first approval
 		// and socket clients may answer approvals (for scripted tests).
 		TrustNewAgents: c.Fake || os.Getenv("PINKY_TRUST_AGENTS") == "1",
-		PIN:            c.PIN,
+		PIN:            au.PIN,
+		AutoUnlock:     au.On,
+		PINOutcome:     au.Outcome,
 		AllowDevices:   allowDevices(),
 		LeaseReserve:   15 * time.Second,
 		TrafficKeys:    trafficKeys(c.Fake),

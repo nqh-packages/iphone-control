@@ -40,3 +40,10 @@ To release:
 A push that is not a release leaves `## Unreleased` as it is, in both files. Never change a released section's heading, never move or reuse a tag, and never push a `v*` tag other than through `scripts/release.sh tag`.
 
 Working on a branch that someone else merges? Leave CHANGELOG.md and CHANGELOG.zh-CN.md alone (parallel branches would conflict there) and end your report with the bullets you suggest for the notes, in English and in Chinese; whoever merges and pushes writes them.
+
+## Fork seams
+
+This fork keeps a few things behind a guard so a session that never read these notes cannot break them. `internal/forkseams/seams.yaml` declares each seam: the package, its symbols and the files that may use them. `internal/forkseams/forkseams_test.go` (run by `make check`) fails with `file:line: rule` and a `fix:` line for a use outside those files, for an allowed file that no longer exists, for a symbol declared twice or gone from its package. Its fixtures in `testdata/` prove each rule.
+
+- The no-prompt passcode store (`secret.NewAgentPINs`, `NewAgentPINsOn`) is built only by `cmd/pinky/autounlock.go` (the daemon's `PINKY_AUTO_UNLOCK=1` wiring) and `cmd/pinky/phone_pin.go` (`pinkyctl phone pin set|check|delete`). Everything else reaches the passcode through `gateway.Options.PIN`.
+- To guard a new seam, add an entry to `seams.yaml`. To let one more file use a seam, add it to `allowed` in the same commit and say why. Never skip or delete the test.

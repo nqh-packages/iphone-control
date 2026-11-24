@@ -1,0 +1,11 @@
+seams:
+  - name: no-prompt store
+    package: example.test/internal/secret
+    symbols: [NewAgentPINs, NewAgentPINsOn]
+    allowed: [cmd/pinky/ok.go]
+    fix: use the wiring in cmd/pinky/ok.go
+  - name: second store
+    package: example.test/internal/secret
+    symbols: [NewAgentPINs]
+    allowed: [cmd/pinky/ok.go]
+    fix: use the wiring
