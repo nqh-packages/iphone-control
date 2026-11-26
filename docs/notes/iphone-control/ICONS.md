@@ -81,3 +81,7 @@ The parity file lists `{"file", "icons": [{"label", "confidence", "box": [x1,y1,
 - `Explain` also returns an error, so a detector that cannot run does not read as one that found nothing.
 - `Found` also carries the manifest's orientation and overlap limit, which `Found.For` applies.
 - A picture of an orientation the model does not read is not sent to it.
+
+## Friction
+
+Report it: `~/.agents/skills/agent-feedback/scripts/agent-feedback submit --tool phone-icons --kind friction --goal "..." --happened "..."`
