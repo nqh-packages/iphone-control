@@ -32,7 +32,8 @@ func otherTransport(e goios.DeviceEntry) (wdaDialFunc, bool) {
 
 func (c *wdaClient) dialed() {
 	c.mu.Lock()
-	c.fails, c.swaps = 0, 0
+	c.fails.Store(0)
+	c.swaps = 0
 	c.mu.Unlock()
 }
 
@@ -45,8 +46,7 @@ func (c *wdaClient) dropSession() {
 func (c *wdaClient) recoverDial(ctx context.Context) {
 	c.dropSession()
 	c.mu.Lock()
-	c.fails++
-	swap := c.fails >= 2 && c.swaps == 0 && c.other != nil
+	swap := c.fails.Add(1) >= 2 && c.swaps == 0 && c.other != nil
 	c.mu.Unlock()
 	if !swap {
 		return
@@ -63,7 +63,7 @@ func (c *wdaClient) recoverDial(ctx context.Context) {
 func (c *wdaClient) dialFailed(err error, retried bool) error {
 	c.dropSession()
 	c.mu.Lock()
-	c.fails++
+	c.fails.Add(1)
 	swapped := c.swaps > 0
 	c.mu.Unlock()
 	tried := "the helper's session was not restarted, because the request may already have been sent"
@@ -78,8 +78,4 @@ func (c *wdaClient) dialFailed(err error, retried bool) error {
 
 const dialFailsGone = 3
 
-func (c *wdaClient) dialFails() int {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	return c.fails
-}
+func (c *wdaClient) dialFails() int { return int(c.fails.Load()) }

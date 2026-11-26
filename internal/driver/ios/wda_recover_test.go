@@ -9,6 +9,7 @@ import (
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DIYgod/pinky/internal/driver"
 )
@@ -120,5 +121,29 @@ func TestGoneAfterRepeatedDialFailsWhileTheRunnerLives(t *testing.T) {
 	}
 	if got := d.gone(err); !errors.Is(got, driver.ErrOffline) {
 		t.Fatalf("not offline after %d dial failures: %v", dialFailsGone, got)
+	}
+}
+
+func TestSessionDialFailureAnswersWhileTheRunnerLives(t *testing.T) {
+	var sessions, failures atomic.Int32
+	srv := recoverServer(t, &sessions)
+	c := newWDADial(dialAfter(srv, &failures, 100))
+	d := &WDADevice{c: c, run: &wdaRun{done: make(chan struct{})}}
+	c.gone = d.gone
+	answered := make(chan error, 1)
+	go func() {
+		var err error
+		for range dialFailsGone + 1 {
+			_, err = c.screenshot(context.Background())
+		}
+		answered <- err
+	}()
+	select {
+	case err := <-answered:
+		if !errors.Is(err, driver.ErrOffline) {
+			t.Fatalf("not offline after repeated dial failures: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("a request that could not open the helper's session never returned")
 	}
 }

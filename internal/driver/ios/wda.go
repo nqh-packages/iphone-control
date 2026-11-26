@@ -53,8 +53,10 @@ type wdaClient struct {
 
 	dialer atomic.Pointer[wdaDialFunc]
 	other  func(ctx context.Context) (wdaDialFunc, bool)
-	fails  int
-	swaps  int
+	// fails counts dial failures in a row. Atomic: gone reads it from a
+	// request that holds mu (session).
+	fails atomic.Int32
+	swaps int
 
 	mu    sync.Mutex
 	sid   string // the WebDriver session
