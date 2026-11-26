@@ -94,3 +94,29 @@ seams:
     allowed:
       - internal/gateway/secrets.go
     fix: "the credential_typed trigger that lets a consent entry fire is set only where a staged secret is handed to the driver, internal/gateway/secrets.go (secretText). If another file really needs to set it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: icon detector pictures
+    package: github.com/DIYgod/pinky/internal/icons
+    symbols:
+      - Look
+      - Explain
+    allowed:
+      - internal/driver/ios/wda_device.go
+      - cmd/pinky/phone_icons.go
+    fix: "a picture reaches the icon detector only from a read's gated picture (internal/driver/ios/wda_device.go, after its capture gate) or from a saved file named on the CLI (cmd/pinky/phone_icons.go). Another read path adds its file to `allowed` in internal/forkseams/seams.yaml in the same commit and says how its picture is gated."
+  - name: icon detector start
+    package: github.com/DIYgod/pinky/internal/icons
+    symbols:
+      - Use
+      - Install
+      - Serve
+    allowed:
+      - cmd/pinky/icons.go
+      - cmd/pinky/phone_icons.go
+    fix: "the detector is started and installed only by the daemon wiring (cmd/pinky/icons.go) and the `phone icons` verbs (cmd/pinky/phone_icons.go). If another file really needs it, add it to `allowed` in internal/forkseams/seams.yaml in the same commit and say why."
+  - name: icon guesses writer
+    package: github.com/DIYgod/pinky/internal/screen
+    methods:
+      - SetGuessedIcons
+    allowed:
+      - internal/driver/ios/wda_device.go
+    fix: "icon guesses enter a screen only in the driver's read (internal/driver/ios/wda_device.go), after the capture gate. They are model output: the policy, gateway and interrupt code never read or write them. Another read path adds its file to `allowed` in internal/forkseams/seams.yaml in the same commit and says why."

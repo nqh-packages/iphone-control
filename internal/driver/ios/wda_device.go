@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/DIYgod/pinky/internal/driver"
+	"github.com/DIYgod/pinky/internal/icons"
 	"github.com/DIYgod/pinky/internal/screen"
 	goios "github.com/danielpaulus/go-ios/ios"
 	"github.com/danielpaulus/go-ios/ios/instruments"
@@ -68,6 +69,7 @@ type WDADevice struct {
 	trees wdaTrees // tree requests, and the apps whose trees are slow (wda_tree.go)
 	// recognize reads a picture's text; nil: recognizeText (tests set it).
 	recognize func([]byte) ([]ocrLine, error)
+	look      func(context.Context, []byte) icons.Found
 
 	closeOnce sync.Once
 	idle      wdaIdle // rest_wda.go
@@ -477,6 +479,7 @@ func (d *WDADevice) Observe(ctx context.Context, opt driver.ObserveOptions) (*sc
 		locked   bool
 		lines    []ocrLine
 		ocrDone  bool
+		found    icons.Found
 		pictured sync.WaitGroup
 		gate     *captureGate
 		tm       wdaTimes
@@ -525,10 +528,13 @@ func (d *WDADevice) Observe(ctx context.Context, opt driver.ObserveOptions) (*sc
 			if err != nil {
 				return
 			}
+			var looked sync.WaitGroup
+			looked.Go(func() { found = d.lookIcons(ctx, pic) })
 			if l, err := d.readText(pic); err == nil {
 				lines, ocrDone = l, true
 			}
 			tm.ocr = time.Since(start) - tm.shot
+			looked.Wait()
 		}()
 	}
 	if opt.OCR || level == treeNone {
@@ -579,7 +585,7 @@ func (d *WDADevice) Observe(ctx context.Context, opt driver.ObserveOptions) (*sc
 		use := gate.late(s)
 		pictured.Wait()
 		if !use {
-			lines, ocrDone = nil, false
+			lines, ocrDone, found = nil, false, icons.Found{}
 		}
 	}
 	if srcErr != nil {
@@ -590,6 +596,7 @@ func (d *WDADevice) Observe(ctx context.Context, opt driver.ObserveOptions) (*sc
 		if ocrDone {
 			addOCR(s, lines)
 		}
+		s.SetGuessedIcons(found.Read, found.For(s))
 		return s, nil
 	}
 	s.Partial = level == treeShallow
@@ -611,6 +618,7 @@ func (d *WDADevice) Observe(ctx context.Context, opt driver.ObserveOptions) (*sc
 	if ocrDone {
 		addOCR(s, lines)
 	}
+	s.SetGuessedIcons(found.Read, found.For(s))
 	return s, nil
 }
 
@@ -639,6 +647,13 @@ func (d *WDADevice) readText(pic []byte) ([]ocrLine, error) {
 		return d.recognize(pic)
 	}
 	return recognizeText(pic, ocrOptions{Languages: ocrLanguages})
+}
+
+func (d *WDADevice) lookIcons(ctx context.Context, pic []byte) icons.Found {
+	if d.look != nil {
+		return d.look(ctx, pic)
+	}
+	return icons.Look(ctx, pic)
 }
 
 // appOr is a's bundle id, or the last read's app when WDA did not say

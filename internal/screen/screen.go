@@ -231,6 +231,9 @@ type Screen struct {
 	// what OCR read from a picture, if anything; the app and lock state
 	// are still known when the phone said them.
 	TreeTooSlow bool
+
+	icons    []Icon
+	iconRead IconRead
 }
 
 // Find returns the element with the given ref.
@@ -289,6 +292,9 @@ func (s *Screen) Header() string {
 	if f, ok := s.Focused(); ok && f.Ref != 0 {
 		parts = append(parts, fmt.Sprintf("focus [%d]", f.Ref))
 	}
+	if s.iconRead == IconsLate {
+		parts = append(parts, "icons unread")
+	}
 	if s.Partial {
 		parts = append(parts, "partial")
 	}
@@ -306,6 +312,10 @@ func (s *Screen) Render() string {
 	for _, e := range s.Elements {
 		b.WriteByte('\n')
 		b.WriteString(e.Line())
+	}
+	for _, i := range s.shownIcons() {
+		b.WriteByte('\n')
+		b.WriteString(i.line())
 	}
 	return b.String()
 }

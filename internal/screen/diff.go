@@ -64,7 +64,8 @@ func Diff(prev, next *Screen) (lines []string, full bool) {
 			lines = append(lines, "- "+e.Line())
 		}
 	}
-	if len(lines) > len(next.Elements)+len(next.Events) {
+	lines = append(lines, iconDiff(prev, next)...)
+	if len(lines) > len(next.Elements)+len(next.Events)+len(next.shownIcons()) {
 		return nil, true
 	}
 	return lines, false

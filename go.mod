@@ -8,6 +8,7 @@ require (
 	github.com/danielpaulus/go-ios v1.3.3-0.20261103131045-6910f3b585ad
 	github.com/ebitengine/purego v0.11.3
 	github.com/egoist/mygo v0.9.1
+	github.com/getcharzp/onnxruntime_purego v1.28.0
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/jsonschema-go v0.4.3
 	github.com/google/uuid v1.6.0

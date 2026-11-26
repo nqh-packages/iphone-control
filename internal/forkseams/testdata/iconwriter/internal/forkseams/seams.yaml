@@ -1,0 +1,6 @@
+seams:
+  - name: icon guesses writer
+    package: example.test/internal/screen
+    methods: [SetGuessedIcons]
+    allowed: []
+    fix: set icons only in the driver read

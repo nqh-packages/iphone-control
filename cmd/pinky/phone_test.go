@@ -28,6 +28,9 @@ const phoneAsCLIEnv = "PINKY_PHONE_TEST_AS_CLI"
 // TestMain lets the test binary stand in for pinkyctl inside a phone run:
 // the run's `phone` shim executes this binary with the variable set.
 func TestMain(m *testing.M) {
+	if standInForIconDetector() {
+		return
+	}
 	if os.Getenv(phoneAsCLIEnv) != "" {
 		main()
 		return

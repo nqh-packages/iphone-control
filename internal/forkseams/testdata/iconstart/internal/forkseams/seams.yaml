@@ -1,0 +1,6 @@
+seams:
+  - name: icon detector start
+    package: example.test/internal/icons
+    symbols: [Use]
+    allowed: [cmd/pinky/ok.go]
+    fix: start only in cmd/pinky/ok.go

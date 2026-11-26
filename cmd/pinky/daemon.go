@@ -207,6 +207,7 @@ func startGateway(c gatewayConfig) (*runningGateway, error) {
 	}
 
 	vlt, stopVault := newSecretVault(pol, dirs, log)
+	startIcons(dirs, log)
 	au := newAutoUnlock(c)
 	if au.On {
 		log.Info("auto unlock is on: a call that finds the phone locked enters the saved passcode", "allowed_devices", len(allowDevices()))

@@ -26,7 +26,7 @@ func ParseScreen(text string) (*screen.Screen, error) {
 	s := &screen.Screen{Width: 400, Height: 800}
 	for n, line := range strings.Split(text, "\n") {
 		line = strings.TrimSpace(line)
-		if line == "" {
+		if line == "" || screen.IsIconLine(line) {
 			continue
 		}
 		if m := headerSize.FindStringSubmatch(line); m != nil {

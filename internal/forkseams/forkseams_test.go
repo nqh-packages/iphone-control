@@ -366,6 +366,9 @@ func TestForkSeamsGuardCatchesEachRule(t *testing.T) {
 		{"codeslotwrite", "seam-code-slot-writer", "cmd/other/use.go", 4},
 		{"interruptfiles", "seam-interrupt-book-user-files", "cmd/other/use.go", 6},
 		{"credtrigger", "seam-credential-trigger-writer", "cmd/other/use.go", 4},
+		{"iconpictures", "seam-icon-detector-pictures", "cmd/other/use.go", 6},
+		{"iconstart", "seam-icon-detector-start", "cmd/other/use.go", 6},
+		{"iconwriter", "seam-icon-guesses-writer", "cmd/other/use.go", 4},
 	}
 	for _, r := range rows {
 		vs, err := check(filepath.Join("testdata", r.dir))

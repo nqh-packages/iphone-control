@@ -24,6 +24,7 @@ import (
 
 	"github.com/DIYgod/pinky/internal/api"
 	"github.com/DIYgod/pinky/internal/gateway"
+	"github.com/DIYgod/pinky/internal/icons"
 )
 
 // pinkyctl phone drives the phone from a shell through Pinky's own phone_*
@@ -79,13 +80,14 @@ func phoneUsage(w io.Writer) {
   pinkyctl phone call [-as NAME] [-wait S] [-task T] [-device D] <tool> [json | k=v ... | -]
   pinkyctl phone run [-wait S] [-as NAME] [-task T] [-device D] [-expect NAME] (<file> | -e '<sh>' | -)
   pinkyctl phone interrupts (check <file> | match <file> <screen.txt> [-expect NAME] [-typed])
+  pinkyctl phone icons [<picture> [-app BUNDLE_ID] [-all] | install <manifest> | status]
   pinkyctl phone pin (set | check | delete) [-device D]
   pinkyctl phone secret put -app BUNDLE_ID [-ttl D] NAME...
   pinkyctl phone login (set | check | delete) -name NAME
   pinkyctl phone fill (-account NAME | -login ID) [-ref N] [-submit] [-app BUNDLE_ID]
 
 status prints one JSON line: free, device, holder, task, reserved_for,
-reserved_left_s, waiting, link, health. tools lists the gateway's phone_*
+reserved_left_s, waiting, link, health, icons. tools lists the gateway's phone_*
 tools as it serves them now. call makes one tool call (the tool name with or
 without phone_): it takes the phone, calls, and releases. run holds one session
 and one lease for the script's whole life; phone call inside it goes through
@@ -101,6 +103,9 @@ run pinkyctl phone fill -h.
 interrupt entries that need it, such as allowing the sign-in request the
 script's own login triggers, fire only then. interrupts match tells which
 entry fires on a saved screen; run pinkyctl phone interrupts help.
+
+icons shows the icons an installed detector guesses on the screen or on a
+saved picture; run pinkyctl phone icons help.
 
 secret put stages a secret from the credential broker for one app, for
 phone_type's {{secret:NAME}}; run pinkyctl phone secret help.
@@ -140,6 +145,8 @@ func phoneMain(args []string, pio phoneIO) int {
 		return phoneSecretCmd(args[1:], pio)
 	case "interrupts":
 		return phoneInterruptsCmd(args[1:], pio)
+	case "icons":
+		return phoneIconsCmd(args[1:], pio)
 	case "help", "-h", "--help", "-help":
 		phoneUsage(pio.out)
 		return phoneExitOK
@@ -200,6 +207,7 @@ type phoneStatus struct {
 	Waiting       int     `json:"waiting"`         // agents in line
 	Link          string  `json:"link"`            // usb or wifi
 	Health        string  `json:"health"`          // the gateway's status: idle, working, in_control, locked, needs_setup, offline, ...
+	Icons         string  `json:"icons"`           // the icon detector's install: installed, or "off: " and why
 }
 
 // phoneStatusOf is a phone's status line for the agent named as: the phone kept
@@ -263,7 +271,9 @@ func phoneStatusCmd(args []string, pio phoneIO) int {
 	if err != nil {
 		return phoneFail(pio, phoneExitUsage, err.Error(), "name one with -device (see `pinkyctl devices`)")
 	}
-	line, _ := json.Marshal(phoneStatusOf(d, phoneHolder(*as)))
+	status := phoneStatusOf(d, phoneHolder(*as))
+	status.Icons = icons.Check(iconsHome(dirs)).String()
+	line, _ := json.Marshal(status)
 	fmt.Fprintf(pio.out, "%s\n", line)
 	return phoneExitOK
 }

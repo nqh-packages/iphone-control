@@ -1,0 +1,6 @@
+seams:
+  - name: icon detector pictures
+    package: example.test/internal/icons
+    symbols: [Look]
+    allowed: [cmd/pinky/ok.go]
+    fix: look only in cmd/pinky/ok.go
