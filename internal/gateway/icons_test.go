@@ -64,3 +64,15 @@ func TestIconsDoNotRelaxPolicy(t *testing.T) {
 		t.Fatal("the text under the finger was not read")
 	}
 }
+
+func TestALateIconReadIsNotAChangedScreen(t *testing.T) {
+	read := &screen.Screen{Width: 375, Height: 667}
+	late := *read
+	late.SetGuessedIcons(screen.IconsLate, nil)
+	if late.Header() == read.Header() {
+		t.Fatal("the agent is not told the icons are unread")
+	}
+	if body(&late) != body(read) {
+		t.Fatalf("a wait would end on an unchanged screen:\n%s\n%s", body(&late), body(read))
+	}
+}

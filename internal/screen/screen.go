@@ -257,7 +257,13 @@ func (s *Screen) Focused() (Element, bool) {
 }
 
 // Header renders the first line of the screen.
-func (s *Screen) Header() string {
+func (s *Screen) Header() string { return s.header(s.iconRead == IconsLate) }
+
+// ComparisonHeader is the header without what says only how the read went,
+// for telling whether the screen changed.
+func (s *Screen) ComparisonHeader() string { return s.header(false) }
+
+func (s *Screen) header(iconsUnread bool) string {
 	parts := []string{fmt.Sprintf("screen %dx%d", s.Width, s.Height)}
 	if s.Locked {
 		parts = append(parts, "locked")
@@ -292,7 +298,7 @@ func (s *Screen) Header() string {
 	if f, ok := s.Focused(); ok && f.Ref != 0 {
 		parts = append(parts, fmt.Sprintf("focus [%d]", f.Ref))
 	}
-	if s.iconRead == IconsLate {
+	if iconsUnread {
 		parts = append(parts, "icons unread")
 	}
 	if s.Partial {

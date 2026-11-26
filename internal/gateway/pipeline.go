@@ -2745,7 +2745,7 @@ func body(s *screen.Screen) string {
 		return ""
 	}
 	var b strings.Builder
-	b.WriteString(s.Header())
+	b.WriteString(s.ComparisonHeader())
 	for _, e := range s.Elements {
 		b.WriteByte('\n')
 		b.WriteString(e.Line())

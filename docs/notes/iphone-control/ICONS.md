@@ -36,7 +36,7 @@ The model and its runtime are data: `models/icons/*.json` names them, their clas
 ## Where the lines show
 
 - A read and the diff after an action show them.
-- `wait_ms` and the history never see them: the gateway compares and records only the header and the elements (`body` in `internal/gateway/pipeline.go`). The header is compared, so after a read that said `icons unread`, `phone_observe` with `wait_ms` can return on a screen that did not change: its polling reads take no picture and so lack the token. This comes from reading the code and has no test.
+- `wait_ms` and the history never see them: the gateway compares and records only the header and the elements (`body` in `internal/gateway/pipeline.go`). The comparison leaves out `icons unread` (`Screen.ComparisonHeader`), so a late look does not end a wait.
 
 ## Looking at what it sees
 
