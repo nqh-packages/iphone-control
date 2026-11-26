@@ -44,11 +44,13 @@ func TestRealModel(t *testing.T) {
 	}
 	t.Cleanup(func() { childCommand = helperCommand("fake") })
 	childCommand = helperCommand("ort")
-	var out strings.Builder
-	if _, err := Install(ctx, committed, home, &out); err != nil {
-		t.Fatalf("install: %v\n%s", err, &out)
+	if !Check(home).Installed {
+		var out strings.Builder
+		if _, err := Install(ctx, committed, home, &out); err != nil {
+			t.Fatalf("install: %v\n%s", err, &out)
+		}
+		t.Logf("install into %s:\n%s", home, &out)
 	}
-	t.Logf("install into %s:\n%s", home, &out)
 
 	m, dir, err := active(home)
 	if err != nil {

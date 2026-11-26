@@ -27,9 +27,16 @@ bin/iphone-daemon start
 pinkyctl phone icons status
 ```
 
+A reinstall of the same manifest id switches the detector off until its self-test passes, so a failed reinstall leaves it off.
+
 `install` downloads the model, its class names and the runtime wheel, checks each sha256, keeps only the runtime library out of the wheel, and tries the detector on a blank picture before it records the install in `<data dir>/icons/active`. The daemon reads the install once, at its start. `phone status` and `phone icons status` check that every file is there with its size; the child checks the model's and the library's sha256 as it loads them, and the daemon log names a file that differs. To remove the detector, delete `<data dir>/icons/` and restart the daemon.
 
 The model and its runtime are data: `models/icons/*.json` names them, their classes, labels, thresholds and apps. No model file is committed, embedded or shipped (`TestNoWeightsInRepo`). The `advnt-screen-parser` code is MIT, its weights AGPL-3.0; they are fetched to this Mac only.
+
+## Where the lines show
+
+- A read and the diff after an action show them.
+- `wait_ms` and the history never see them: the gateway compares and records only the header and the elements (`body` in `internal/gateway/pipeline.go`). The header is compared, so after a read that said `icons unread`, `phone_observe` with `wait_ms` can return on a screen that did not change: its polling reads take no picture and so lack the token. This comes from reading the code and has no test.
 
 ## Looking at what it sees
 
@@ -63,6 +70,8 @@ On this Mac (Apple silicon, load average about 20), `PINKY_ICONS_REAL=1 PINKY_IC
 | 20 looks through the child | p50 149 ms, p95 156 ms |
 | Detections matched against the Python detector (class and box within 3 px, 118 frames) | 64 of 66, score difference at most 0.076 (bilinear resize here, OpenCV's there) |
 | Idle child | 0 s of CPU in 1 s, no network sockets |
+
+The real-model test uses the install in `$PINKY_HOME/data/icons`, and installs there only when there is none (without `PINKY_HOME`, into a temporary folder).
 
 The parity file lists `{"file", "icons": [{"label", "confidence", "box": [x1,y1,x2,y2]}]}` per saved 375x667 picture.
 
