@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DIYgod/pinky/internal/driver"
+	"github.com/DIYgod/pinky/internal/driver/ios"
 )
 
 // pairingProvider lists the phones it paired.
@@ -148,5 +149,35 @@ func TestDeviceFilterReachesProvider(t *testing.T) {
 	}
 	if !a.allowed("connect-10.0.0.2:41000") || b.allowed("connect-10.0.0.2:41000") {
 		t.Error("the phone connected through one provider is not let in there alone")
+	}
+}
+
+// TestAllowDevicesLimitsProviders checks that PINKY_ALLOW_DEVICES alone
+// keeps the providers off every other phone: the gateway hiding a phone is
+// not enough, since a provider prepares each phone it looks at.
+func TestAllowDevicesLimitsProviders(t *testing.T) {
+	t.Setenv("PINKY_HOME", t.TempDir())
+	t.Setenv("PINKY_DEVICES", "")
+	t.Setenv("PINKY_ALLOW_DEVICES", "usb-phone")
+	p, err := newIOSProvider(slog.New(slog.DiscardHandler))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if only := p.(*ios.Provider).Only; len(only) != 1 || !only["usb-phone"] {
+		t.Errorf("the iOS provider looks at %v, want only usb-phone", only)
+	}
+	under := &limitedProvider{}
+	saved := providerFactories
+	t.Cleanup(func() { providerFactories = saved })
+	providerFactories = []func(*slog.Logger) (driver.Provider, error){
+		func(*slog.Logger) (driver.Provider, error) { return under, nil },
+	}
+	realProviders(slog.New(slog.DiscardHandler))
+	if under.allowed == nil || !under.allowed("usb-phone") || under.allowed("other-phone") {
+		t.Error("the limit is not PINKY_ALLOW_DEVICES")
+	}
+	t.Setenv("PINKY_DEVICES", "usb-phone,other-phone")
+	if only := onlyDevices(); len(only) != 1 || !only["usb-phone"] {
+		t.Errorf("with both set Pinky is limited to %v, want the phones both name", only)
 	}
 }

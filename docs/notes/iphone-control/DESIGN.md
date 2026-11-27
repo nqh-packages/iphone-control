@@ -7,7 +7,7 @@ codebase-design gate on 2026-11-24. Where the two differ, this file decides. The
 ## Decisions
 
 1. **Phone and host.** One dedicated iPhone SE on iOS 26.2, driven from this Mac through Pinky's iOS path (WebDriverAgent host app on the phone).
-   The gateway knows only phones named in `PINKY_ALLOW_DEVICES`; `PINKY_TRUST_AGENTS=1` skips the New agent approval. Both are in `cmd/pinky/daemon.go`.
+   Pinky touches only the phones named in `PINKY_ALLOW_DEVICES`: the providers do not look at any other (`cmd/pinky/providers.go`) and the gateway does not list it. Until 2026-11-27 only the gateway filtered, so the iOS provider still prepared the other phones, developer disk images included. `PINKY_TRUST_AGENTS=1` skips the New agent approval (`cmd/pinky/daemon.go`).
 2. **Only external agents drive it.** The built-in runner answers `unsupported` in `pinky daemon`; nothing to change.
 3. **The lease line lives in the gateway** (`internal/gateway/queue.go`), not in the CLI, so MCP clients and the CLI share one line.
    - FIFO tickets per device, entered with `phone_connect wait_ms` (at most 600000), kept alive by the holder's repeated calls plus 5 s.

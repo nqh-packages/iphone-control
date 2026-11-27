@@ -71,9 +71,9 @@ func newAndroidProvider(log *slog.Logger) (driver.Provider, error) {
 	}
 	// adb's own discovery stops seeing the network after the computer's
 	// network changes; the driver then reconnects the phones paired over
-	// Wi-Fi itself. Not while PINKY_DEVICES limits Pinky to some phones:
-	// the others belong to other tools.
-	reconnect := strings.TrimSpace(os.Getenv("PINKY_DEVICES")) == ""
+	// Wi-Fi itself. Not while Pinky is limited to some phones
+	// (onlyDevices): the others belong to other tools.
+	reconnect := onlyDevices() == nil
 	client := &adb.Client{}
 	return android.NewProvider(android.Config{
 		Client: client,
@@ -85,9 +85,9 @@ func newAndroidProvider(log *slog.Logger) (driver.Provider, error) {
 		//
 		// A server Pinky starts does not connect by itself to the phones
 		// its discovery finds: the driver does (ReconnectWiFi), by the
-		// same names, and only to the phones it uses. Under PINKY_DEVICES,
-		// where the driver connects nothing by itself, the server does as
-		// it always did.
+		// same names, and only to the phones it uses. Limited to some
+		// phones, where the driver connects nothing by itself, the server
+		// does as it always did.
 		StartServer: func(ctx context.Context) error {
 			t, err := adb.StartServerWith(ctx, adb.ServerOptions{NoAutoConnect: reconnect})
 			switch {
@@ -135,8 +135,8 @@ func newAndroidProvider(log *slog.Logger) (driver.Provider, error) {
 func newIOSProvider(log *slog.Logger) (driver.Provider, error) {
 	p := ios.NewProvider()
 	p.Log = log
-	// Under PINKY_DEVICES the provider does not even look at the other
-	// phones, over a cable or Wi-Fi: other tools use them.
+	// Limited to some phones (onlyDevices), the provider does not even look
+	// at the others, over a cable or Wi-Fi.
 	p.Only = onlyDevices()
 	// On Linux and Windows, Pinky finds iPhones on Wi-Fi itself: the
 	// system's usbmuxd lists them there not at all, or only while they are
@@ -160,9 +160,8 @@ func newIOSProvider(log *slog.Logger) (driver.Provider, error) {
 
 // realProviders returns the providers for real phones. A provider that
 // fails to start is skipped with a warning, so one missing tool (adb,
-// usbmuxd) does not take the others down. PINKY_DEVICES, a comma-separated
-// list of device ids, limits Pinky to those phones (for development, when
-// other tools use the rest).
+// usbmuxd) does not take the others down. Each provider is limited to the
+// phones onlyDevices names.
 func realProviders(log *slog.Logger) []driver.Provider {
 	only := onlyDevices()
 	var out []driver.Provider
@@ -199,17 +198,34 @@ type limiter interface {
 	Limit(allowed func(id string) bool)
 }
 
-// onlyDevices reads PINKY_DEVICES: nil when it is not set.
+// onlyDevices reads the phones Pinky may look at, from PINKY_ALLOW_DEVICES
+// and PINKY_DEVICES: nil when neither names one, and with both set, the
+// phones both name.
 func onlyDevices() map[string]bool {
-	v := strings.TrimSpace(os.Getenv("PINKY_DEVICES"))
-	if v == "" {
-		return nil
+	allow, dev := deviceIDs("PINKY_ALLOW_DEVICES"), deviceIDs("PINKY_DEVICES")
+	switch {
+	case allow == nil:
+		return dev
+	case dev == nil:
+		return allow
 	}
-	only := map[string]bool{}
-	for _, id := range strings.Split(v, ",") {
-		only[strings.TrimSpace(id)] = true
+	maps.DeleteFunc(allow, func(id string, _ bool) bool { return !dev[id] })
+	return allow
+}
+
+// deviceIDs reads a comma-separated list of device ids from the environment:
+// nil when it names none.
+func deviceIDs(env string) map[string]bool {
+	var ids map[string]bool
+	for _, id := range strings.Split(os.Getenv(env), ",") {
+		if id = strings.TrimSpace(id); id != "" {
+			if ids == nil {
+				ids = map[string]bool{}
+			}
+			ids[id] = true
+		}
 	}
-	return only
+	return ids
 }
 
 // onlyProvider hides every device not in only. It is used as a pointer,
@@ -293,7 +309,7 @@ func (p *onlyProvider) List(ctx context.Context) ([]driver.Info, error) {
 
 func (p *onlyProvider) Open(ctx context.Context, id string) (driver.Device, error) {
 	if !p.allowed(id) {
-		return nil, fmt.Errorf("%s is not in PINKY_DEVICES: %w", id, driver.ErrNotFound)
+		return nil, fmt.Errorf("%s is not in PINKY_ALLOW_DEVICES or PINKY_DEVICES: %w", id, driver.ErrNotFound)
 	}
 	return p.Provider.Open(ctx, id)
 }

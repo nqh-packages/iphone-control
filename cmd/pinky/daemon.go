@@ -6,12 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"runtime"
-	"strings"
+	"slices"
 	"syscall"
 	"time"
 
@@ -290,13 +291,8 @@ func trafficKeys(fake bool) secret.Store {
 }
 
 // allowDevices reads PINKY_ALLOW_DEVICES, a comma-separated list of the only
-// phone ids this gateway may know; unset means every phone.
+// phone ids this gateway may know; unset means every phone. The providers are
+// limited to the same ids (onlyDevices).
 func allowDevices() []string {
-	var ids []string
-	for _, id := range strings.Split(os.Getenv("PINKY_ALLOW_DEVICES"), ",") {
-		if id = strings.TrimSpace(id); id != "" {
-			ids = append(ids, id)
-		}
-	}
-	return ids
+	return slices.Sorted(maps.Keys(deviceIDs("PINKY_ALLOW_DEVICES")))
 }
